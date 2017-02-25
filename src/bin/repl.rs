@@ -3,6 +3,8 @@ extern crate backforth;
 fn main() {
     use std::io::{Read, Write, stdin, stdout};
 
+    use backforth::Flattenable;
+
     let mut env = backforth::Env::new();
     let mut inbuf = String::new();
 
@@ -21,16 +23,10 @@ fn main() {
         };
 
         match env.run(program) {
-            Ok(result) => println!("\t-> {}", flatten(result)),
+            Ok(result) => println!("\t-> {}", result.flatten(" ")),
             Err(err) => println!("error"),
         }
 
         inbuf.clear();
     }
-}
-
-fn flatten(result: Vec<backforth::Value>) -> String {
-    result.into_iter().map(|val| {
-        format!("{}", val)
-    }).collect::<Vec<_>>().join(" ")
 }

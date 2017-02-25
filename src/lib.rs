@@ -3,7 +3,8 @@ use std::collections::HashMap;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Word {
     Atom(String),
-    Closure(Vec<Word>),
+    Int(i32),
+    List(Vec<Word>),
 }
 
 pub type Program = Vec<Word>;
@@ -59,8 +60,8 @@ impl Stack {
     }
 
     fn pop(&mut self) -> Result<(), ParseErr> {
-        if let Some(closure) = self.0.pop() {
-            self.emit(Word::Closure(closure))
+        if let Some(list) = self.0.pop() {
+            self.emit(Word::List(list))
         } else {
             Err(ParseErr)
         }
@@ -88,15 +89,9 @@ impl Stack {
 
 pub struct EvalErr;
 
-#[derive(Clone, Debug)]
-pub enum Value {
-    Int(i32),
-    Closure(Vec<Word>),
-}
-
 pub struct Env {
-    bindings: HashMap<String, Value>,
-    data: Vec<Value>,
+    bindings: HashMap<String, Word>,
+    data: Vec<Word>,
     code: Vec<Word>,
 }
 
@@ -109,12 +104,12 @@ impl Env {
         }
     }
 
-    pub fn run(&mut self, program: Program) -> Result<Vec<Value>, EvalErr> {
+    pub fn run(&mut self, program: Program) -> Result<Vec<Word>, EvalErr> {
         self.code.extend(program.into_iter());
 
         while let Some(word) = self.code.pop() {
             match word {
-                Word::Closure(words) => {
+                Word::List(words) => {
                     self.push(words);
                     continue;
                 },
@@ -128,6 +123,8 @@ impl Env {
                         return Err(err);
                     },
                 },
+
+                other => self.push(other),
             }
         }
 
@@ -138,8 +135,8 @@ impl Env {
         match name {
             "if" => {
                 let test = self.pop()?.as_bool()?;
-                let then_clause = self.pop()?.as_closure()?;
-                let else_clause = self.pop()?.as_closure()?;
+                let then_clause = self.pop()?.as_list()?;
+                let else_clause = self.pop()?.as_list()?;
                 if test {
                     self.code.extend(then_clause.into_iter());
                 } else {
@@ -174,7 +171,7 @@ impl Env {
                 self.bindings.insert(name, value);
             } else if let Some(value) = self.bindings.get(other).cloned() {
                 match value {
-                    Value::Closure(words) => self.code.extend(words),
+                    Word::List(words) => self.code.extend(words),
                     other => self.push(other),
                 }
             } else {
@@ -187,7 +184,7 @@ impl Env {
     }
 
     fn int_binop<R, F>(&mut self, op: F) -> Result<(), EvalErr>
-        where R: Into<Value>, F: FnOnce(i32, i32) -> Result<R, EvalErr>
+        where R: Into<Word>, F: FnOnce(i32, i32) -> Result<R, EvalErr>
     {
         let lhs = self.pop()?.as_int()?;
         let rhs = self.pop()?.as_int()?;
@@ -195,55 +192,55 @@ impl Env {
         Ok(())
     }
 
-    fn push<T: Into<Value>>(&mut self, t: T) {
+    fn push<T: Into<Word>>(&mut self, t: T) {
         self.data.push(t.into());
     }
 
-    fn pop(&mut self) -> Result<Value, EvalErr> {
+    fn pop(&mut self) -> Result<Word, EvalErr> {
         self.data.pop().ok_or(EvalErr)
     }
 }
 
-impl From<bool> for Value {
+impl From<bool> for Word {
     fn from(b: bool) -> Self {
         match b {
-            true => Value::Int(1),
-            false => Value::Int(0),
+            true => Word::Int(1),
+            false => Word::Int(0),
         }
     }
 }
 
-impl From<i32> for Value {
+impl From<i32> for Word {
     fn from(i: i32) -> Self {
-        Value::Int(i)
+        Word::Int(i)
     }
 }
 
-impl From<Vec<Word>> for Value {
+impl From<Vec<Word>> for Word {
     fn from(words: Vec<Word>) -> Self {
-        Value::Closure(words)
+        Word::List(words)
     }
 }
 
-impl Value {
+impl Word {
     fn as_bool(self) -> Result<bool, EvalErr> {
         match self {
-            Value::Int(1) => Ok(true),
-            Value::Int(_) => Ok(false),
+            Word::Int(0) => Ok(false),
+            Word::Int(_) => Ok(true),
             _ => Err(EvalErr),
         }
     }
 
     fn as_int(self) -> Result<i32, EvalErr> {
         match self {
-            Value::Int(i) => Ok(i),
+            Word::Int(i) => Ok(i),
             _ => Err(EvalErr),
         }
     }
 
-    fn as_closure(self) -> Result<Vec<Word>, EvalErr> {
+    fn as_list(self) -> Result<Vec<Word>, EvalErr> {
         match self {
-            Value::Closure(words) => Ok(words),
+            Word::List(words) => Ok(words),
             _ => Err(EvalErr),
         }
     }
@@ -254,30 +251,30 @@ mod display {
 
     use super::*;
 
-    impl fmt::Display for Value {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            match self {
-                &Value::Int(i) => write!(f, "{}", i),
-
-                &Value::Closure(ref words) => fmt_closure(f, &words),
-            }
-        }
-    }
-
     impl fmt::Display for Word {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             match self {
+                &Word::Int(i) => write!(f, "{}", i),
+
                 &Word::Atom(ref a) => write!(f, "{}", a),
 
-                &Word::Closure(ref words) => fmt_closure(f, &words),
+                &Word::List(ref words) => {
+                    write!(f, "{{ {} }}", words.flatten(" "))
+                },
             }
         }
     }
+}
 
-    fn fmt_closure(f: &mut fmt::Formatter, words: &[Word]) -> fmt::Result {
-        write!(f, "{{ {} }}", words.iter().map(|word| {
+pub trait Flattenable {
+    fn flatten(&self, &str) -> String;
+}
+
+impl Flattenable for Vec<Word> {
+    fn flatten(&self, sep: &str) -> String {
+        self.iter().map(|word| {
             format!("{}", word)
-        }).collect::<Vec<_>>().join(" "))
+        }).collect::<Vec<_>>().join(sep)
     }
 }
 
