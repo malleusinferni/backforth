@@ -11,7 +11,11 @@ pub enum Word {
 pub type Program = Vec<Word>;
 
 #[derive(Copy, Clone, Debug)]
-pub struct ParseErr;
+pub enum ParseErr {
+    MissingOpenBrace,
+    MissingCloseBrace,
+    MissingEndQuote,
+}
 
 pub fn parse(input: &str) -> Result<Program, ParseErr> {
     let input = input.lines().rev().collect::<Vec<_>>().join("\n");
@@ -37,7 +41,7 @@ pub fn parse(input: &str) -> Result<Program, ParseErr> {
                 let mut buf = String::new();
                 loop {
                     match stream.next() {
-                        None => return Err(ParseErr),
+                        None => return Err(ParseErr::MissingEndQuote),
                         Some('"') => break,
                         Some(ch) => buf.push(ch),
                     }
@@ -87,7 +91,7 @@ impl Stack {
         if let Some(list) = self.0.pop() {
             self.emit(Word::List(list))
         } else {
-            Err(ParseErr)
+            Err(ParseErr::MissingOpenBrace)
         }
     }
 
@@ -96,7 +100,7 @@ impl Stack {
             program.push(word);
             Ok(())
         } else {
-            Err(ParseErr)
+            Err(ParseErr::MissingOpenBrace)
         }
     }
 
@@ -104,10 +108,12 @@ impl Stack {
         if let Some(program) = self.0.pop() {
             if self.0.is_empty() {
                 return Ok(program);
+            } else {
+                return Err(ParseErr::MissingCloseBrace);
             }
         }
 
-        Err(ParseErr)
+        Err(ParseErr::MissingOpenBrace)
     }
 }
 
@@ -175,6 +181,12 @@ impl Env {
                 let b = self.pop()?;
                 self.push(a);
                 self.push(b);
+            },
+
+            "dup" => {
+                let val = self.pop()?;
+                self.push(val.clone());
+                self.push(val);
             },
 
             "drop" => { let _ = self.pop()?; },
@@ -324,6 +336,22 @@ mod display {
                     write!(f, "{{ {} }}", words.flatten(" "))
                 },
             }
+        }
+    }
+
+    impl fmt::Display for ParseErr {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "parse error: {}", match self {
+                &ParseErr::MissingOpenBrace => "missing {",
+                &ParseErr::MissingCloseBrace => "missing }",
+                &ParseErr::MissingEndQuote => "missing \"",
+            })
+        }
+    }
+
+    impl fmt::Display for EvalErr {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "error")
         }
     }
 }

@@ -11,6 +11,8 @@ fn main() {
     let bye = backforth::parse("bye").unwrap();
 
     loop {
+        inbuf.clear();
+
         print!("> ");
         stdout().flush().unwrap();
 
@@ -19,7 +21,7 @@ fn main() {
         let program = match backforth::parse(&inbuf) {
             Ok(program) => program,
             Err(err) => {
-                println!("parse error");
+                println!("{}", err);
                 continue;
             },
         };
@@ -27,10 +29,11 @@ fn main() {
         if program == bye { return; }
 
         match env.run(program) {
-            Ok(result) => println!("\t-> {}", result.flatten(" ")),
-            Err(err) => println!("error"),
-        }
+            Ok(result) => if result.len() > 0 {
+                println!("\t-> {}", result.flatten(" "));
+            },
 
-        inbuf.clear();
+            Err(err) => println!("{}", err),
+        }
     }
 }
