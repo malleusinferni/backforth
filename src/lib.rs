@@ -137,8 +137,21 @@ impl Stack {
     }
 }
 
-#[derive(Debug)]
-pub struct EvalErr;
+#[derive(Clone, Debug)]
+pub enum EvalErr {
+    StackUnderflow,
+    CantUnderstand(String),
+    DivideByZero,
+    WrongType(Word, TypeName),
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum TypeName {
+    Atom,
+    Int,
+    Str,
+    List,
+}
 
 pub struct Env {
     bindings: HashMap<String, Word>,
@@ -155,7 +168,7 @@ impl Env {
         }
     }
 
-    pub fn run(&mut self, program: Program) -> Result<Vec<Word>, EvalErr> {
+    pub fn run(&mut self, program: Program) -> Result<(), EvalErr> {
         self.code.extend(program.into_iter());
 
         while let Some(word) = self.code.pop() {
@@ -179,7 +192,11 @@ impl Env {
             }
         }
 
-        Ok(self.data.drain(..).collect())
+        Ok(())
+    }
+
+    pub fn view(&self) -> &[Word] {
+        &self.data
     }
 
     fn eval(&mut self, name: &str) -> Result<(), EvalErr> {
@@ -233,7 +250,9 @@ impl Env {
             "+" => self.int_binop(|x, y| Ok(x + y))?,
             "-" => self.int_binop(|x, y| Ok(x - y))?,
             "*" => self.int_binop(|x, y| Ok(x * y))?,
-            "/" => self.int_binop(|x, y| x.checked_div(y).ok_or(EvalErr))?,
+            "/" => self.int_binop(|x, y| x.checked_div(y).ok_or({
+                EvalErr::DivideByZero
+            }))?,
 
             "~" => {
                 let positive = self.pop()?.as_int()?;
@@ -255,8 +274,7 @@ impl Env {
                     other => self.push(other),
                 }
             } else {
-                println!("Can't understand {}", other);
-                return Err(EvalErr);
+                return Err(EvalErr::CantUnderstand(other.to_owned()));
             },
         }
 
@@ -277,7 +295,7 @@ impl Env {
     }
 
     fn pop(&mut self) -> Result<Word, EvalErr> {
-        self.data.pop().ok_or(EvalErr)
+        self.data.pop().ok_or(EvalErr::StackUnderflow)
     }
 }
 
@@ -313,21 +331,21 @@ impl Word {
         match self {
             Word::Int(0) => Ok(false),
             Word::Int(_) => Ok(true),
-            _ => Err(EvalErr),
+            val => Err(EvalErr::WrongType(val, TypeName::Int)),
         }
     }
 
     fn as_int(self) -> Result<i32, EvalErr> {
         match self {
             Word::Int(i) => Ok(i),
-            _ => Err(EvalErr),
+            val => Err(EvalErr::WrongType(val, TypeName::Int)),
         }
     }
 
     fn as_list(self) -> Result<Vec<Word>, EvalErr> {
         match self {
             Word::List(words) => Ok(words),
-            _ => Err(EvalErr),
+            val => Err(EvalErr::WrongType(val, TypeName::List)),
         }
     }
 
@@ -381,7 +399,32 @@ mod display {
 
     impl fmt::Display for EvalErr {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(f, "error")
+            write!(f, "error: ")?;
+
+            match self {
+                &EvalErr::StackUnderflow => write!(f, "stack underflow"),
+
+                &EvalErr::DivideByZero => write!(f, "divided by zero"),
+
+                &EvalErr::WrongType(ref word, ref typename) => {
+                    write!(f, "type of {} is not {}", word, typename)
+                },
+
+                &EvalErr::CantUnderstand(ref name) => {
+                    write!(f, "can't understand {}", name)
+                },
+            }
+        }
+    }
+
+    impl fmt::Display for TypeName {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "{}", match self {
+                &TypeName::Atom => "atom",
+                &TypeName::Int => "integer",
+                &TypeName::Str => "string",
+                &TypeName::List => "list",
+            })
         }
     }
 }
@@ -390,7 +433,7 @@ pub trait Flattenable {
     fn flatten(&self, &str) -> String;
 }
 
-impl Flattenable for Vec<Word> {
+impl Flattenable for [Word] {
     fn flatten(&self, sep: &str) -> String {
         self.iter().map(|word| {
             format!("{}", word)

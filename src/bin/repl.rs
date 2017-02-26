@@ -13,7 +13,12 @@ fn main() {
     loop {
         inbuf.clear();
 
-        print!("> ");
+        if env.view().is_empty() {
+            print!("> ");
+        } else {
+            print!("{} ~> ", env.view().flatten(" "));
+        }
+
         stdout().flush().unwrap();
 
         stdin().read_line(&mut inbuf).unwrap();
@@ -28,12 +33,8 @@ fn main() {
 
         if program == bye { return; }
 
-        match env.run(program) {
-            Ok(result) => if result.len() > 0 {
-                println!("\t-> {}", result.flatten(" "));
-            },
-
-            Err(err) => println!("{}", err),
+        if let Err(err) = env.run(program) {
+            println!("{}", err);
         }
     }
 }
