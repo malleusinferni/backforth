@@ -150,7 +150,16 @@ impl Env {
 
             "echo" => println!("{}", self.pop()?),
 
+            "swap" => {
+                let a = self.pop()?;
+                let b = self.pop()?;
+                self.push(a);
+                self.push(b);
+            },
+
             "drop" => { let _ = self.pop()?; },
+
+            "clear" => self.data.clear(),
 
             "+" => self.int_binop(|x, y| Ok(x + y))?,
             "-" => self.int_binop(|x, y| Ok(x - y))?,

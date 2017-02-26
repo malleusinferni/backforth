@@ -1,16 +1,18 @@
 extern crate backforth;
 
 fn main() {
-    use std::io::{Read, Write, stdin, stdout};
+    use std::io::{Write, stdin, stdout};
 
     use backforth::Flattenable;
 
     let mut env = backforth::Env::new();
     let mut inbuf = String::new();
 
+    let bye = backforth::parse("bye").unwrap();
+
     loop {
         print!("> ");
-        stdout().flush();
+        stdout().flush().unwrap();
 
         stdin().read_line(&mut inbuf).unwrap();
 
@@ -21,6 +23,8 @@ fn main() {
                 continue;
             },
         };
+
+        if program == bye { return; }
 
         match env.run(program) {
             Ok(result) => println!("\t-> {}", result.flatten(" ")),
