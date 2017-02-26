@@ -18,8 +18,6 @@ pub enum ParseErr {
 }
 
 pub fn parse(input: &str) -> Result<Program, ParseErr> {
-    let input = input.lines().rev().collect::<Vec<_>>().join("\n");
-
     let mut stream = input.chars().peekable();
     let mut stack = Stack::with_capacity(8);
     stack.push();
@@ -49,6 +47,10 @@ pub fn parse(input: &str) -> Result<Program, ParseErr> {
                 stack.emit(Word::Str(buf))?;
             },
 
+            ';' | '\n' => {
+                stack.newline()?;
+            },
+
             s if s.is_whitespace() => continue,
 
             w => {
@@ -73,10 +75,19 @@ pub fn parse(input: &str) -> Result<Program, ParseErr> {
         }
     }
 
-    stack.flatten()
+    let program = stack.flatten()?;
+    if stack.0.is_empty() {
+        Ok(program)
+    } else {
+        Err(ParseErr::MissingCloseBrace)
+    }
 }
 
-struct Stack(Vec<Program>);
+struct Stack(Vec<Block>);
+
+type Block = Vec<Line>;
+
+type Line = Vec<Word>;
 
 impl Stack {
     fn with_capacity(n: usize) -> Self {
@@ -84,39 +95,49 @@ impl Stack {
     }
 
     fn push(&mut self) {
-        self.0.push(Vec::with_capacity(16));
+        let mut block = Vec::with_capacity(16);
+        block.push(Vec::with_capacity(16));
+        self.0.push(block);
     }
 
     fn pop(&mut self) -> Result<(), ParseErr> {
-        if let Some(list) = self.0.pop() {
-            self.emit(Word::List(list))
-        } else {
-            Err(ParseErr::MissingOpenBrace)
-        }
+        let list = self.flatten()?;
+        self.emit(Word::List(list))
+    }
+
+    fn newline(&mut self) -> Result<(), ParseErr> {
+        let block = self.0.iter_mut().last()
+            .ok_or(ParseErr::MissingOpenBrace)?;
+
+        block.push(Vec::with_capacity(16));
+        Ok(())
     }
 
     fn emit(&mut self, word: Word) -> Result<(), ParseErr> {
-        if let Some(program) = self.0.iter_mut().last() {
-            program.push(word);
+        if let Some(block) = self.0.iter_mut().last() {
+            let line = block.iter_mut().last().unwrap();
+            line.push(word);
             Ok(())
         } else {
             Err(ParseErr::MissingOpenBrace)
         }
     }
 
-    fn flatten(mut self) -> Result<Program, ParseErr> {
-        if let Some(program) = self.0.pop() {
-            if self.0.is_empty() {
-                return Ok(program);
-            } else {
-                return Err(ParseErr::MissingCloseBrace);
+    fn flatten(&mut self) -> Result<Program, ParseErr> {
+        if let Some(mut block) = self.0.pop() {
+            let total_len = block.iter().map(|line| line.len()).sum();
+            let mut list = Vec::with_capacity(total_len);
+            while let Some(line) = block.pop() {
+                list.extend(line.into_iter());
             }
+            Ok(list)
+        } else {
+            Err(ParseErr::MissingOpenBrace)
         }
-
-        Err(ParseErr::MissingOpenBrace)
     }
 }
 
+#[derive(Debug)]
 pub struct EvalErr;
 
 pub struct Env {
@@ -379,4 +400,21 @@ fn valid_parse() {
     for input in inputs {
         parse(input).unwrap();
     }
+}
+
+#[test]
+fn magic_linebreaks() {
+    let src = vec!{
+        "factorial= {",
+        "if > swap 1 swap {",
+        "* factorial - swap 1 dup",
+        "} swap {",
+        "} dup",
+        "}",
+        "factorial 4",
+    }.join("\n");
+
+    let mut env = Env::new();
+    let result = env.run(parse(&src).unwrap()).unwrap();
+    assert_eq!(result, vec![Word::Int(24)]);
 }
