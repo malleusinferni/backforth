@@ -4,6 +4,7 @@ use std::collections::HashMap;
 pub enum Word {
     Atom(String),
     Int(i32),
+    Str(String),
     List(Vec<Word>),
 }
 
@@ -24,6 +25,25 @@ pub fn parse(input: &str) -> Result<Program, ParseErr> {
             '{' => stack.push(),
 
             '}' => stack.pop()?,
+
+            '#' => loop {
+                match stream.next() {
+                    Some('\n') | None => break,
+                    _ => (),
+                }
+            },
+
+            '"' => {
+                let mut buf = String::new();
+                loop {
+                    match stream.next() {
+                        None => return Err(ParseErr),
+                        Some('"') => break,
+                        Some(ch) => buf.push(ch),
+                    }
+                }
+                stack.emit(Word::Str(buf))?;
+            },
 
             s if s.is_whitespace() => continue,
 
@@ -148,7 +168,7 @@ impl Env {
                 }
             },
 
-            "echo" => println!("{}", self.pop()?),
+            "echo" => println!("{}", self.pop()?.into_string()),
 
             "swap" => {
                 let a = self.pop()?;
@@ -160,6 +180,13 @@ impl Env {
             "drop" => { let _ = self.pop()?; },
 
             "clear" => self.data.clear(),
+
+            "concat" => {
+                let mut lhs = self.pop()?.into_string();
+                let rhs = self.pop()?.into_string();
+                lhs.push_str(&rhs);
+                self.push(lhs);
+            },
 
             "+" => self.int_binop(|x, y| Ok(x + y))?,
             "-" => self.int_binop(|x, y| Ok(x - y))?,
@@ -233,6 +260,12 @@ impl From<Vec<Word>> for Word {
     }
 }
 
+impl From<String> for Word {
+    fn from(string: String) -> Self {
+        Word::Str(string)
+    }
+}
+
 impl Word {
     fn as_bool(self) -> Result<bool, EvalErr> {
         match self {
@@ -255,6 +288,22 @@ impl Word {
             _ => Err(EvalErr),
         }
     }
+
+    /*
+    fn as_str(self) -> Result<String, EvalErr> {
+        match self {
+            Word::Str(s) => Ok(s),
+            _ => Err(EvalErr),
+        }
+    }
+    */
+
+    fn into_string(self) -> String {
+        match self {
+            Word::Str(s) => s,
+            other => format!("{}", other),
+        }
+    }
 }
 
 mod display {
@@ -266,6 +315,8 @@ mod display {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             match self {
                 &Word::Int(i) => write!(f, "{}", i),
+
+                &Word::Str(ref s) => write!(f, "\"{}\"", s),
 
                 &Word::Atom(ref a) => write!(f, "{}", a),
 
