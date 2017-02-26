@@ -204,6 +204,15 @@ impl Env {
                 self.push(b);
             },
 
+            "rot" => {
+                let a = self.pop()?;
+                let b = self.pop()?;
+                let c = self.pop()?;
+                self.push(b);
+                self.push(a);
+                self.push(c);
+            },
+
             "dup" => {
                 let val = self.pop()?;
                 self.push(val.clone());
@@ -406,9 +415,9 @@ fn valid_parse() {
 fn magic_linebreaks() {
     let src = vec!{
         "factorial= {",
-        "if > swap 1 swap {",
+        "if < 1 rot {",
         "* factorial - swap 1 dup",
-        "} swap {",
+        "} {",
         "} dup",
         "}",
         "factorial 4",
