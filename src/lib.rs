@@ -40,7 +40,11 @@ pub fn parse(input: &str) -> Result<Program, ParseErr> {
                     if ch == '=' { break; }
                 }
 
-                stack.emit(Word::Atom(word))?;
+                if let Ok(int) = word.parse::<i32>() {
+                    stack.emit(Word::Int(int))?;
+                } else {
+                    stack.emit(Word::Atom(word))?;
+                }
             },
         }
     }
@@ -162,9 +166,7 @@ impl Env {
             ">" => self.int_binop(|x, y| Ok(x > y))?,
             "<" => self.int_binop(|x, y| Ok(x < y))?,
 
-            other => if let Ok(int) = other.parse::<i32>() {
-                self.push(int);
-            } else if other.ends_with("=") {
+            other => if other.ends_with("=") {
                 let mut name = other.to_owned();
                 name.pop(); // Remove final '='
                 let value = self.pop()?;
