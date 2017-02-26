@@ -1,0 +1,14 @@
+when= {
+    if rot rot {}
+}
+
+factorial= {
+    dup
+    when < 1 swap {
+        dup
+        - swap 1
+        * factorial
+    }
+}
+
+factorial 5 # => 120

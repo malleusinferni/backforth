@@ -453,20 +453,3 @@ fn valid_parse() {
         parse(input).unwrap();
     }
 }
-
-#[test]
-fn magic_linebreaks() {
-    let src = vec!{
-        "factorial= {",
-        "if < 1 rot {",
-        "* factorial - swap 1 dup",
-        "} {",
-        "} dup",
-        "}",
-        "factorial 4",
-    }.join("\n");
-
-    let mut env = Env::new();
-    let result = env.run(parse(&src).unwrap()).unwrap();
-    assert_eq!(result, vec![Word::Int(24)]);
-}
