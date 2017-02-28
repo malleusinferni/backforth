@@ -143,6 +143,7 @@ pub enum EvalErr {
     CantUnderstand(String),
     DivideByZero,
     WrongType(Word, TypeName),
+    BadParse(ParseErr),
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -178,14 +179,20 @@ impl Env {
                     continue;
                 },
 
-                Word::Atom(name) => match self.eval(&name) {
-                    Ok(()) => continue,
+                Word::Atom(name) => {
+                    if &name == "bye" {
+                        return Ok(());
+                    }
 
-                    Err(err) => {
-                        self.code.clear();
-                        self.data.clear();
-                        return Err(err);
-                    },
+                    match self.eval(&name) {
+                        Ok(()) => continue,
+
+                        Err(err) => {
+                            self.code.clear();
+                            self.data.clear();
+                            return Err(err);
+                        },
+                    }
                 },
 
                 other => self.push(other),
@@ -212,7 +219,72 @@ impl Env {
                 }
             },
 
+            "try" => {
+                let body = self.pop()?.as_list()?;
+                let catch = self.pop()?.as_list()?;
+
+                let mut env = Env {
+                    code: Vec::new(),
+                    data: self.data.clone(),
+                    bindings: self.bindings.clone(),
+                };
+
+                match env.run(body) {
+                    Ok(()) => {
+                        self.bindings = env.bindings;
+                        self.data = env.data;
+                    },
+
+                    Err(err) => {
+                        self.push(format!("{}", err));
+                        self.code.extend(catch.into_iter());
+                    },
+                }
+            },
+
+            "eval" => {
+                let body = self.pop()?.as_list()?;
+                self.code.extend(body.into_iter());
+            },
+
+            "loop" => {
+                let body = self.pop()?.as_list()?;
+                self.code.push(Word::Atom("loop".into()));
+                self.code.push(Word::List(body.clone()));
+                self.code.extend(body.into_iter());
+            },
+
+            "view" => {
+                let dump = self.view().iter().cloned().collect::<Vec<_>>();
+                self.push(dump);
+            },
+
+            "len" => {
+                let len = self.data.len() as i32;
+                self.push(len);
+            },
+
+            "parse" => {
+                let source = self.pop()?.as_str()?;
+                let program = parse(&source)?;
+                self.push(program);
+            },
+
             "echo" => println!("{}", self.pop()?.into_string()),
+
+            "prompt" => {
+                use std::io::{stdin, stdout, Write};
+
+                let text = self.pop()?.into_string();
+                print!("{}", text);
+                stdout().flush().unwrap();
+
+                let mut inbuf = String::new();
+                stdin().read_line(&mut inbuf).unwrap();
+                inbuf.pop(); // Discard '\n'
+
+                self.push(inbuf);
+            },
 
             "swap" => {
                 let a = self.pop()?;
@@ -349,20 +421,24 @@ impl Word {
         }
     }
 
-    /*
     fn as_str(self) -> Result<String, EvalErr> {
         match self {
             Word::Str(s) => Ok(s),
-            _ => Err(EvalErr),
+            val => Err(EvalErr::WrongType(val, TypeName::Str)),
         }
     }
-    */
 
     fn into_string(self) -> String {
         match self {
             Word::Str(s) => s,
             other => format!("{}", other),
         }
+    }
+}
+
+impl From<ParseErr> for EvalErr {
+    fn from(err: ParseErr) -> Self {
+        EvalErr::BadParse(err)
     }
 }
 
@@ -412,6 +488,10 @@ mod display {
 
                 &EvalErr::CantUnderstand(ref name) => {
                     write!(f, "can't understand {}", name)
+                },
+
+                &EvalErr::BadParse(ref err) => {
+                    write!(f, "{}", err)
                 },
             }
         }
