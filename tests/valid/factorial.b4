@@ -1,7 +1,3 @@
-when= {
-    if rot rot {}
-}
-
 factorial= {
     dup
     when < 1 swap {

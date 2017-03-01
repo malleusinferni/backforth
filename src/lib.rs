@@ -1,5 +1,10 @@
 use std::collections::HashMap;
 
+static STDLIB: &'static [(&'static str, &'static str)] = &[
+    ("when", "if -rot {}"),
+    ("-rot", "rot rot"),
+];
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Word {
     Atom(String),
@@ -164,7 +169,9 @@ pub struct Env {
 impl Env {
     pub fn new() -> Self {
         Env {
-            bindings: HashMap::new(),
+            bindings: STDLIB.iter().map(|&(ref k, ref v)| {
+                ((*k).to_owned(), Word::List(parse(v).unwrap()))
+            }).collect(),
             data: Vec::new(),
             code: Vec::new(),
             restore: None,
