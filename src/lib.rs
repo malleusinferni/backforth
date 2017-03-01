@@ -158,6 +158,7 @@ pub struct Env {
     bindings: HashMap<String, Word>,
     data: Vec<Word>,
     code: Vec<Word>,
+    restore: Option<Box<Env>>,
 }
 
 impl Env {
@@ -166,6 +167,7 @@ impl Env {
             bindings: HashMap::new(),
             data: Vec::new(),
             code: Vec::new(),
+            restore: None,
         }
     }
 
@@ -182,16 +184,13 @@ impl Env {
                 Word::Atom(name) => {
                     if &name == "bye" {
                         return Ok(());
-                    }
-
-                    match self.eval(&name) {
-                        Ok(()) => continue,
-
-                        Err(err) => {
-                            self.code.clear();
-                            self.data.clear();
+                    } else if let Err(err) = self.eval(&name) {
+                        if let Some(env) = self.restore.take() {
+                            *self = *env;
+                            self.push(format!("{}", err));
+                        } else {
                             return Err(err);
-                        },
+                        }
                     }
                 },
 
@@ -223,23 +222,16 @@ impl Env {
                 let body = self.pop()?.as_list()?;
                 let catch = self.pop()?.as_list()?;
 
-                let mut env = Env {
-                    code: Vec::new(),
-                    data: self.data.clone(),
+                let mut restore = Env {
                     bindings: self.bindings.clone(),
+                    code: self.code.clone(),
+                    data: self.data.clone(),
+                    restore: self.restore.take(),
                 };
 
-                match env.run(body) {
-                    Ok(()) => {
-                        self.bindings = env.bindings;
-                        self.data = env.data;
-                    },
-
-                    Err(err) => {
-                        self.push(format!("{}", err));
-                        self.code.extend(catch.into_iter());
-                    },
-                }
+                restore.code.extend(catch);
+                self.code.extend(body);
+                self.restore = Some(Box::new(restore));
             },
 
             "eval" => {
