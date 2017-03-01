@@ -230,8 +230,16 @@ impl Env {
                 };
 
                 restore.code.extend(catch);
+
+                self.code.push(Word::Atom("end try".into()));
                 self.code.extend(body);
                 self.restore = Some(Box::new(restore));
+            },
+
+            "end try" => {
+                if let Some(restore) = self.restore.take() {
+                    self.restore = restore.restore;
+                }
             },
 
             "eval" => {
