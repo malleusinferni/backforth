@@ -187,7 +187,7 @@ impl Env {
                     } else if let Err(err) = self.eval(&name) {
                         if let Some(env) = self.restore.take() {
                             *self = *env;
-                            self.push(format!("{}", err));
+                            self.push(format!("{} error: {}", name, err));
                         } else {
                             return Err(err);
                         }
@@ -470,7 +470,7 @@ mod display {
 
     impl fmt::Display for ParseErr {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(f, "parse error: {}", match self {
+            write!(f, "{}", match self {
                 &ParseErr::MissingOpenBrace => "missing {",
                 &ParseErr::MissingCloseBrace => "missing }",
                 &ParseErr::MissingEndQuote => "missing \"",
@@ -480,8 +480,6 @@ mod display {
 
     impl fmt::Display for EvalErr {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(f, "error: ")?;
-
             match self {
                 &EvalErr::StackUnderflow => write!(f, "stack underflow"),
 
