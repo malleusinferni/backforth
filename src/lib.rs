@@ -278,6 +278,12 @@ impl Env {
                 self.push(inbuf);
             },
 
+            "flatten" => {
+                let sep = self.pop()?.into_string();
+                let list = self.pop()?.into_list();
+                self.push(list.flatten(&sep));
+            },
+
             "swap" => {
                 let a = self.pop()?;
                 let b = self.pop()?;
@@ -424,6 +430,13 @@ impl Word {
         match self {
             Word::Str(s) => s,
             other => format!("{}", other),
+        }
+    }
+
+    fn into_list(self) -> Vec<Word> {
+        match self {
+            Word::List(list) => list,
+            other => vec![other],
         }
     }
 }

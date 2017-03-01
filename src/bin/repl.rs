@@ -1,10 +1,27 @@
 extern crate backforth;
 
-fn main() {
-    let source = "loop { try { eval parse prompt \"> \" } { echo } }";
-    let program = backforth::parse(source).unwrap();
+static SOURCE: &'static str = r#"
+loop {
+    try {
+        len
 
-    if let Err(err) = backforth::Env::new().run(program) {
-        println!("{}", err);
+        if < 0 rot {
+            concat swap " ~> " flatten " " view
+        } {
+            "> "
+        }
+
+        eval parse prompt
+    } {
+        echo
     }
+}
+"#;
+
+fn main() {
+    let program = backforth::parse(SOURCE).unwrap();
+
+    backforth::Env::new().run(program).unwrap_or_else(|err| {
+        println!("{}", err);
+    });
 }
