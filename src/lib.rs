@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 static STDLIB: &'static [(&'static str, &'static str)] = &[
     ("when", "if -rot {}"),
@@ -10,7 +10,7 @@ pub enum Word {
     Atom(String),
     Int(i32),
     Str(String),
-    List(Vec<Word>),
+    List(VecDeque<Word>),
 }
 
 pub type Program = Vec<Word>;
@@ -107,7 +107,7 @@ impl Stack {
 
     fn pop(&mut self) -> Result<(), ParseErr> {
         let list = self.flatten()?;
-        self.emit(Word::List(list))
+        self.emit(Word::List(list.into()))
     }
 
     fn newline(&mut self) -> Result<(), ParseErr> {
@@ -149,6 +149,7 @@ pub enum EvalErr {
     DivideByZero,
     WrongType(Word, TypeName),
     BadParse(ParseErr),
+    EmptyList,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -170,7 +171,7 @@ impl Env {
     pub fn new() -> Self {
         Env {
             bindings: STDLIB.iter().map(|&(ref k, ref v)| {
-                ((*k).to_owned(), Word::List(parse(v).unwrap()))
+                ((*k).to_owned(), Word::List(parse(v).unwrap().into()))
             }).collect(),
             data: Vec::new(),
             code: Vec::new(),
@@ -249,6 +250,11 @@ impl Env {
                 }
             },
 
+            "explode" => {
+                let items = self.pop()?.as_list()?;
+                self.data.extend(items.into_iter());
+            },
+
             "eval" => {
                 let body = self.pop()?.as_list()?;
                 self.code.extend(body.into_iter());
@@ -261,14 +267,42 @@ impl Env {
                 self.code.extend(body.into_iter());
             },
 
-            "view" => {
+            "capture" => {
                 let dump = self.view().iter().cloned().collect::<Vec<_>>();
                 self.push(dump);
             },
 
             "len" => {
-                let len = self.data.len() as i32;
-                self.push(len);
+                let len = self.pop()?.as_list()?.len();
+                self.push(len as i32);
+            },
+
+            "push" => {
+                let value = self.pop()?;
+                let mut list = self.pop()?.as_list()?;
+                list.push_back(value);
+                self.push(list);
+            },
+
+            "pop" => {
+                let mut list = self.pop()?.as_list()?;
+                let value = list.pop_back().ok_or(EvalErr::EmptyList)?;
+                self.push(list);
+                self.push(value);
+            },
+
+            "shift" => {
+                let mut list = self.pop()?.as_list()?;
+                let value = list.pop_front().ok_or(EvalErr::EmptyList)?;
+                self.push(list);
+                self.push(value);
+            },
+
+            "unshift" => {
+                let value = self.pop()?;
+                let mut list = self.pop()?.as_list()?;
+                list.push_front(value);
+                self.push(list);
             },
 
             "parse" => {
@@ -401,6 +435,12 @@ impl From<i32> for Word {
 
 impl From<Vec<Word>> for Word {
     fn from(words: Vec<Word>) -> Self {
+        Word::List(words.into())
+    }
+}
+
+impl From<VecDeque<Word>> for Word {
+    fn from(words: VecDeque<Word>) -> Self {
         Word::List(words)
     }
 }
@@ -427,7 +467,7 @@ impl Word {
         }
     }
 
-    fn as_list(self) -> Result<Vec<Word>, EvalErr> {
+    fn as_list(self) -> Result<VecDeque<Word>, EvalErr> {
         match self {
             Word::List(words) => Ok(words),
             val => Err(EvalErr::WrongType(val, TypeName::List)),
@@ -448,10 +488,10 @@ impl Word {
         }
     }
 
-    fn into_list(self) -> Vec<Word> {
+    fn into_list(self) -> VecDeque<Word> {
         match self {
             Word::List(list) => list,
-            other => vec![other],
+            other => vec![other].into(),
         }
     }
 }
@@ -511,6 +551,10 @@ mod display {
                 &EvalErr::BadParse(ref err) => {
                     write!(f, "{}", err)
                 },
+
+                &EvalErr::EmptyList => {
+                    write!(f, "empty list")
+                },
             }
         }
     }
@@ -532,6 +576,14 @@ pub trait Flattenable {
 }
 
 impl Flattenable for [Word] {
+    fn flatten(&self, sep: &str) -> String {
+        self.iter().map(|word| {
+            format!("{}", word)
+        }).collect::<Vec<_>>().join(sep)
+    }
+}
+
+impl Flattenable for VecDeque<Word> {
     fn flatten(&self, sep: &str) -> String {
         self.iter().map(|word| {
             format!("{}", word)

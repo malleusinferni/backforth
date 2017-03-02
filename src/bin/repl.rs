@@ -3,10 +3,10 @@ extern crate backforth;
 static SOURCE: &'static str = r#"
 loop {
     try {
-        len
+        len capture
 
         if < 0 rot {
-            concat swap " ~> " flatten " " view
+            concat swap " ~> " flatten " " capture
         } {
             "> "
         }
