@@ -150,6 +150,7 @@ pub enum EvalErr {
     WrongType(Word, TypeName),
     BadParse(ParseErr),
     EmptyList,
+    MacroFailed,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -382,6 +383,23 @@ impl Env {
             ">" => self.int_binop(|x, y| Ok(x > y))?,
             "<" => self.int_binop(|x, y| Ok(x < y))?,
 
+            "))" => {
+                let rhs = self.code.pop().ok_or(EvalErr::MacroFailed)?;
+                let op = self.code.pop().ok_or(EvalErr::MacroFailed)?;
+                let lhs = self.code.pop().ok_or(EvalErr::MacroFailed)?;
+
+                if let Some(Word::Atom(name)) = self.code.pop() {
+                    if &name == "((" {
+                        self.code.push(op);
+                        self.code.push(lhs);
+                        self.code.push(rhs);
+                        return Ok(());
+                    }
+                }
+
+                return Err(EvalErr::MacroFailed);
+            },
+
             other => if other.ends_with("=") {
                 let mut name = other.to_owned();
                 name.pop(); // Remove final '='
@@ -554,6 +572,10 @@ mod display {
 
                 &EvalErr::EmptyList => {
                     write!(f, "empty list")
+                },
+
+                &EvalErr::MacroFailed => {
+                    write!(f, "bad arguments for macro")
                 },
             }
         }
