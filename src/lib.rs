@@ -11,6 +11,7 @@ pub enum Word {
     Int(i32),
     Str(String),
     List(VecDeque<Word>),
+    Dict(HashMap<String, Word>),
 }
 
 pub type Program = Vec<Word>;
@@ -273,6 +274,11 @@ impl Env {
                 self.push(dump);
             },
 
+            "bindings" => {
+                let dict = self.bindings.clone();
+                self.push(dict);
+            },
+
             "len" => {
                 let len = self.pop()?.as_list()?.len();
                 self.push(len as i32);
@@ -469,6 +475,12 @@ impl From<String> for Word {
     }
 }
 
+impl From<HashMap<String, Word>> for Word {
+    fn from(dict: HashMap<String, Word>) -> Self {
+        Word::Dict(dict)
+    }
+}
+
 impl Word {
     fn as_bool(self) -> Result<bool, EvalErr> {
         match self {
@@ -536,6 +548,10 @@ mod display {
 
                 &Word::List(ref words) => {
                     write!(f, "{{ {} }}", words.flatten(" "))
+                },
+
+                &Word::Dict(ref map) => {
+                    write!(f, "dict {{ {} }}", map.flatten(" ; "))
                 },
             }
         }
@@ -609,6 +625,14 @@ impl Flattenable for VecDeque<Word> {
     fn flatten(&self, sep: &str) -> String {
         self.iter().map(|word| {
             format!("{}", word)
+        }).collect::<Vec<_>>().join(sep)
+    }
+}
+
+impl Flattenable for HashMap<String, Word> {
+    fn flatten(&self, sep: &str) -> String {
+        self.iter().map(|(ref k, ref v)| {
+            format!("{}= {}", k, v)
         }).collect::<Vec<_>>().join(sep)
     }
 }
