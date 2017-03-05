@@ -1,4 +1,11 @@
+mod parser;
+mod display;
+
 use std::collections::{HashMap, VecDeque};
+
+use parser::{Program, ParseErr};
+
+pub use parser::parse;
 
 static STDLIB: &'static [(&'static str, &'static str)] = &[
     ("when", "if -rot {}"),
@@ -12,135 +19,6 @@ pub enum Word {
     Str(String),
     List(VecDeque<Word>),
     Dict(HashMap<String, Word>),
-}
-
-pub type Program = Vec<Word>;
-
-#[derive(Copy, Clone, Debug)]
-pub enum ParseErr {
-    MissingOpenBrace,
-    MissingCloseBrace,
-    MissingEndQuote,
-}
-
-pub fn parse(input: &str) -> Result<Program, ParseErr> {
-    let mut stream = input.chars().peekable();
-    let mut stack = Stack::with_capacity(8);
-    stack.push();
-
-    while let Some(ch) = stream.next() {
-        match ch {
-            '{' => stack.push(),
-
-            '}' => stack.pop()?,
-
-            '#' => loop {
-                match stream.next() {
-                    Some('\n') | None => break,
-                    _ => (),
-                }
-            },
-
-            '"' => {
-                let mut buf = String::new();
-                loop {
-                    match stream.next() {
-                        None => return Err(ParseErr::MissingEndQuote),
-                        Some('"') => break,
-                        Some(ch) => buf.push(ch),
-                    }
-                }
-                stack.emit(Word::Str(buf))?;
-            },
-
-            ';' | '\n' => {
-                stack.newline()?;
-            },
-
-            s if s.is_whitespace() => continue,
-
-            w => {
-                let mut word = String::new();
-                word.push(w);
-                while let Some(&ch) = stream.peek() {
-                    if ch.is_whitespace() || ch == '{' || ch == '}' {
-                        break;
-                    }
-
-                    word.extend(stream.next());
-
-                    if ch == '=' { break; }
-                }
-
-                if let Ok(int) = word.parse::<i32>() {
-                    stack.emit(Word::Int(int))?;
-                } else {
-                    stack.emit(Word::Atom(word))?;
-                }
-            },
-        }
-    }
-
-    let program = stack.flatten()?;
-    if stack.0.is_empty() {
-        Ok(program)
-    } else {
-        Err(ParseErr::MissingCloseBrace)
-    }
-}
-
-struct Stack(Vec<Block>);
-
-type Block = Vec<Line>;
-
-type Line = Vec<Word>;
-
-impl Stack {
-    fn with_capacity(n: usize) -> Self {
-        Stack(Vec::with_capacity(n))
-    }
-
-    fn push(&mut self) {
-        let mut block = Vec::with_capacity(16);
-        block.push(Vec::with_capacity(16));
-        self.0.push(block);
-    }
-
-    fn pop(&mut self) -> Result<(), ParseErr> {
-        let list = self.flatten()?;
-        self.emit(Word::List(list.into()))
-    }
-
-    fn newline(&mut self) -> Result<(), ParseErr> {
-        let block = self.0.iter_mut().last()
-            .ok_or(ParseErr::MissingOpenBrace)?;
-
-        block.push(Vec::with_capacity(16));
-        Ok(())
-    }
-
-    fn emit(&mut self, word: Word) -> Result<(), ParseErr> {
-        if let Some(block) = self.0.iter_mut().last() {
-            let line = block.iter_mut().last().unwrap();
-            line.push(word);
-            Ok(())
-        } else {
-            Err(ParseErr::MissingOpenBrace)
-        }
-    }
-
-    fn flatten(&mut self) -> Result<Program, ParseErr> {
-        if let Some(mut block) = self.0.pop() {
-            let total_len = block.iter().map(|line| line.len()).sum();
-            let mut list = Vec::with_capacity(total_len);
-            while let Some(line) = block.pop() {
-                list.extend(line.into_iter());
-            }
-            Ok(list)
-        } else {
-            Err(ParseErr::MissingOpenBrace)
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -529,83 +407,6 @@ impl Word {
 impl From<ParseErr> for EvalErr {
     fn from(err: ParseErr) -> Self {
         EvalErr::BadParse(err)
-    }
-}
-
-mod display {
-    use std::fmt;
-
-    use super::*;
-
-    impl fmt::Display for Word {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            match self {
-                &Word::Int(i) => write!(f, "{}", i),
-
-                &Word::Str(ref s) => write!(f, "\"{}\"", s),
-
-                &Word::Atom(ref a) => write!(f, "{}", a),
-
-                &Word::List(ref words) => {
-                    write!(f, "{{ {} }}", words.flatten(" "))
-                },
-
-                &Word::Dict(ref map) => {
-                    write!(f, "dict {{ {} }}", map.flatten(" ; "))
-                },
-            }
-        }
-    }
-
-    impl fmt::Display for ParseErr {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(f, "{}", match self {
-                &ParseErr::MissingOpenBrace => "missing {",
-                &ParseErr::MissingCloseBrace => "missing }",
-                &ParseErr::MissingEndQuote => "missing \"",
-            })
-        }
-    }
-
-    impl fmt::Display for EvalErr {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            match self {
-                &EvalErr::StackUnderflow => write!(f, "stack underflow"),
-
-                &EvalErr::DivideByZero => write!(f, "divided by zero"),
-
-                &EvalErr::WrongType(ref word, ref typename) => {
-                    write!(f, "type of {} is not {}", word, typename)
-                },
-
-                &EvalErr::CantUnderstand(ref name) => {
-                    write!(f, "can't understand {}", name)
-                },
-
-                &EvalErr::BadParse(ref err) => {
-                    write!(f, "{}", err)
-                },
-
-                &EvalErr::EmptyList => {
-                    write!(f, "empty list")
-                },
-
-                &EvalErr::MacroFailed => {
-                    write!(f, "bad arguments for macro")
-                },
-            }
-        }
-    }
-
-    impl fmt::Display for TypeName {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(f, "{}", match self {
-                &TypeName::Atom => "atom",
-                &TypeName::Int => "integer",
-                &TypeName::Str => "string",
-                &TypeName::List => "list",
-            })
-        }
     }
 }
 
