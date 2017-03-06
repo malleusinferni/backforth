@@ -10,7 +10,7 @@ macro_rules! valid {
                 include_str!(concat!("valid/", stringify!($name), ".b4"))
             };
 
-            let mut env = Env::new();
+            let mut env = Shell::new();
             env.run(parse(&source).unwrap()).unwrap();
             assert_eq!(env.view(), &[ $( $value ),* ]);
         }

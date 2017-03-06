@@ -40,16 +40,16 @@ pub enum TypeName {
     List,
 }
 
-pub struct Env {
+pub struct Shell {
     bindings: HashMap<String, Word>,
     data: Vec<Word>,
     code: Vec<Word>,
-    restore: Option<Box<Env>>,
+    restore: Option<Box<Shell>>,
 }
 
-impl Env {
+impl Shell {
     pub fn new() -> Self {
-        Env {
+        Shell {
             bindings: STDLIB.iter().map(|&(ref k, ref v)| {
                 ((*k).to_owned(), Word::List(parse(v).unwrap().into()))
             }).collect(),
@@ -110,7 +110,7 @@ impl Env {
                 let body = self.pop()?.as_list()?;
                 let catch = self.pop()?.as_list()?;
 
-                let mut restore = Env {
+                let mut restore = Shell {
                     bindings: self.bindings.clone(),
                     code: self.code.clone(),
                     data: self.data.clone(),
