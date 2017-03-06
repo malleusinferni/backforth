@@ -41,21 +41,27 @@ pub enum TypeName {
 }
 
 pub struct Shell {
-    bindings: HashMap<String, Word>,
+    dict: HashMap<String, Word>,
     data: Vec<Word>,
     code: Vec<Word>,
-    restore: Option<Box<Shell>>,
+    restore: Vec<Env>,
+}
+
+struct Env {
+    dict: HashMap<String, Word>,
+    data: Vec<Word>,
+    code: Vec<Word>,
 }
 
 impl Shell {
     pub fn new() -> Self {
         Shell {
-            bindings: STDLIB.iter().map(|&(ref k, ref v)| {
+            dict: STDLIB.iter().map(|&(ref k, ref v)| {
                 ((*k).to_owned(), Word::List(parse(v).unwrap().into()))
             }).collect(),
             data: Vec::new(),
             code: Vec::new(),
-            restore: None,
+            restore: Vec::new(),
         }
     }
 
@@ -73,8 +79,10 @@ impl Shell {
                     if &name == "bye" {
                         return Ok(());
                     } else if let Err(err) = self.eval(&name) {
-                        if let Some(env) = self.restore.take() {
-                            *self = *env;
+                        if let Some(env) = self.restore.pop() {
+                            self.dict = env.dict;
+                            self.data = env.data;
+                            self.code = env.code;
                             self.push(format!("{} error: {}", name, err));
                         } else {
                             return Err(err);
@@ -107,27 +115,27 @@ impl Shell {
             },
 
             "try" => {
+                /*
+                 * popeh eval pusheh ... swap
+                 */
                 let body = self.pop()?.as_list()?;
                 let catch = self.pop()?.as_list()?;
 
-                let mut restore = Shell {
-                    bindings: self.bindings.clone(),
+                let mut restore = Env {
+                    dict: self.dict.clone(),
                     code: self.code.clone(),
                     data: self.data.clone(),
-                    restore: self.restore.take(),
                 };
 
                 restore.code.extend(catch);
+                self.restore.push(restore);
 
-                self.code.push(Word::Atom("end try".into()));
+                self.code.push(Word::atom("popeh"));
                 self.code.extend(body);
-                self.restore = Some(Box::new(restore));
             },
 
-            "end try" => {
-                if let Some(restore) = self.restore.take() {
-                    self.restore = restore.restore;
-                }
+            "popeh" => {
+                self.restore.pop();
             },
 
             "explode" => {
@@ -138,6 +146,11 @@ impl Shell {
             "eval" => {
                 let body = self.pop()?.as_list()?;
                 self.code.extend(body.into_iter());
+            },
+
+            "quote" => {
+                let word = self.code.pop().ok_or(EvalErr::StackUnderflow)?;
+                self.data.push(word);
             },
 
             "loop" => {
@@ -153,7 +166,7 @@ impl Shell {
             },
 
             "bindings" => {
-                let dict = self.bindings.clone();
+                let dict = self.dict.clone();
                 self.push(dict);
             },
 
@@ -288,8 +301,8 @@ impl Shell {
                 let mut name = other.to_owned();
                 name.pop(); // Remove final '='
                 let value = self.pop()?;
-                self.bindings.insert(name, value);
-            } else if let Some(value) = self.bindings.get(other).cloned() {
+                self.dict.insert(name, value);
+            } else if let Some(value) = self.dict.get(other).cloned() {
                 match value {
                     Word::List(words) => self.code.extend(words),
                     other => self.push(other),
@@ -360,6 +373,10 @@ impl From<HashMap<String, Word>> for Word {
 }
 
 impl Word {
+    fn atom(name: &str) -> Self {
+        Word::Atom(name.to_owned())
+    }
+
     fn as_bool(self) -> Result<bool, EvalErr> {
         match self {
             Word::Int(0) => Ok(false),
