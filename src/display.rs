@@ -22,7 +22,7 @@ impl fmt::Display for Word {
             &Word::Dict(ref map) => if map.is_empty() {
                 write!(f, "dict {{}}")
             } else {
-                write!(f, "dict {{ {} }}", map.flatten(" ; "))
+                write!(f, "dict {{ {} }}", map.flatten("; "))
             },
         }
     }

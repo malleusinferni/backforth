@@ -40,13 +40,15 @@ pub fn parse(input: &str) -> Result<Program, ParseErr> {
             s if s.is_whitespace() => continue,
 
             w => {
+                let mut prev = w;
                 let mut word = String::new();
                 word.push(w);
                 while let Some(&ch) = stream.peek() {
-                    if ch.is_whitespace() || ch == '{' || ch == '}' {
+                    if word_break(prev, ch) {
                         break;
                     }
 
+                    prev = ch;
                     word.extend(stream.next());
                 }
 
@@ -142,4 +144,41 @@ fn parse_hex(word: String) -> Result<u32, ParseErr> {
     //}
 
     u32::from_str_radix(&word, 16).map_err(|_| ParseErr::BadHexLiteral)
+}
+
+fn word_break(a: char, b: char) -> bool {
+    fn is_delim(ch: char) -> bool {
+        match ch {
+            '{' | ';' | '}' => true,
+            _ => false,
+        }
+    }
+
+    match (a, b) {
+        (_, s) if s.is_whitespace() => true,
+        (_, s) if is_delim(s) => true,
+        ('=', '=') => false,
+        ('=', _) => true,
+        (_, '=') => true,
+        _ => false,
+    }
+}
+
+#[test]
+fn funky_word_breaks() {
+    let inputs = vec![
+        ("k= 1", "k = 1"),
+        ("{}{}{}", "{ } { } { }"),
+        ("{+ 1 2}", "{ + 1 2 }"),
+        ("foo;bar;baz", "baz bar foo"),
+    ];
+
+    for (left, right) in inputs {
+        let left: Word = parse(left).unwrap().into();
+        let right: Word = parse(right).unwrap().into();
+
+        if left != right {
+            panic!("{} parsed as {:?}", &left, &left);
+        }
+    }
 }

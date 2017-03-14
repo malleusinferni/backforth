@@ -496,20 +496,7 @@ impl Flattenable for VecDeque<Word> {
 impl Flattenable for HashMap<String, Word> {
     fn flatten(&self, sep: &str) -> String {
         self.iter().map(|(ref k, ref v)| {
-            format!("{}= {}", k, v)
+            format!("{} = {}", k, v)
         }).collect::<Vec<_>>().join(sep)
-    }
-}
-
-#[test]
-fn valid_parse() {
-    let inputs = vec![
-        "if test { + 2 2 } { + 1 3 }",
-        "if test {+ 2 2} {+ 1 3}",
-        "k= 1",
-    ];
-
-    for input in inputs {
-        parse(input).unwrap();
     }
 }
