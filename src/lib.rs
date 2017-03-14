@@ -17,6 +17,7 @@ static STDLIB: &'static [(&'static str, &'static str)] = &[
 pub enum Word {
     Atom(String),
     Int(i32),
+    Hex(u32),
     Str(String),
     List(VecDeque<Word>),
     Dict(HashMap<String, Word>),
@@ -27,6 +28,7 @@ pub enum EvalErr {
     StackUnderflow,
     CantUnderstand(String),
     DivideByZero,
+    CantCoerce(Word, TypeName),
     WrongType(Word, TypeName),
     BadParse(ParseErr),
     EmptyList,
@@ -37,6 +39,7 @@ pub enum EvalErr {
 pub enum TypeName {
     Atom,
     Int,
+    Hex,
     Str,
     List,
 }
@@ -265,6 +268,16 @@ impl Shell {
                 self.push(lhs);
             },
 
+            "hex" => {
+                let hex = self.pop()?.into_hex()?;
+                self.push(hex);
+            },
+
+            "int" => {
+                let int = self.pop()?.into_int()?;
+                self.push(int);
+            },
+
             "+" => self.int_binop(|x, y| Ok(x + y))?,
             "-" => self.int_binop(|x, y| Ok(x - y))?,
             "*" => self.int_binop(|x, y| Ok(x * y))?,
@@ -322,8 +335,8 @@ impl Shell {
     fn int_binop<R, F>(&mut self, op: F) -> Result<(), EvalErr>
         where R: Into<Word>, F: FnOnce(i32, i32) -> Result<R, EvalErr>
     {
-        let lhs = self.pop()?.as_int()?;
-        let rhs = self.pop()?.as_int()?;
+        let lhs = self.pop()?.into_int()?;
+        let rhs = self.pop()?.into_int()?;
         self.push(op(lhs, rhs)?);
         Ok(())
     }
@@ -349,6 +362,12 @@ impl From<bool> for Word {
 impl From<i32> for Word {
     fn from(i: i32) -> Self {
         Word::Int(i)
+    }
+}
+
+impl From<u32> for Word {
+    fn from(h: u32) -> Self {
+        Word::Hex(h)
     }
 }
 
@@ -414,6 +433,22 @@ impl Word {
         match self {
             Word::Str(s) => Ok(s),
             val => Err(EvalErr::WrongType(val, TypeName::Str)),
+        }
+    }
+
+    fn into_int(self) -> Result<i32, EvalErr> {
+        match self {
+            Word::Int(i) => Ok(i),
+            Word::Hex(h) if h <= i32::max_value() as u32 => Ok(h as i32),
+            other => Err(EvalErr::CantCoerce(other, TypeName::Int)),
+        }
+    }
+
+    fn into_hex(self) -> Result<u32, EvalErr> {
+        match self {
+            Word::Hex(h) => Ok(h),
+            Word::Int(i) if i >= 0 => Ok(i as u32),
+            other => Err(EvalErr::CantCoerce(other, TypeName::Hex)),
         }
     }
 

@@ -7,6 +7,8 @@ impl fmt::Display for Word {
         match self {
             &Word::Int(i) => write!(f, "{}", i),
 
+            &Word::Hex(h) => write!(f, "#{:x}", h),
+
             &Word::Str(ref s) => write!(f, "\"{}\"", s),
 
             &Word::Atom(ref a) => write!(f, "{}", a),
@@ -32,6 +34,7 @@ impl fmt::Display for ParseErr {
             &ParseErr::MissingOpenBrace => "missing {",
             &ParseErr::MissingCloseBrace => "missing }",
             &ParseErr::MissingEndQuote => "missing \"",
+            &ParseErr::BadHexLiteral => "invalid hex format",
         })
     }
 }
@@ -42,6 +45,10 @@ impl fmt::Display for EvalErr {
             &EvalErr::StackUnderflow => write!(f, "stack underflow"),
 
             &EvalErr::DivideByZero => write!(f, "divided by zero"),
+
+            &EvalErr::CantCoerce(ref word, ref typename) => {
+                write!(f, "cannot convert {} to {}", word, typename)
+            },
 
             &EvalErr::WrongType(ref word, ref typename) => {
                 write!(f, "type of {} is not {}", word, typename)
@@ -71,6 +78,7 @@ impl fmt::Display for TypeName {
         write!(f, "{}", match self {
             &TypeName::Atom => "atom",
             &TypeName::Int => "integer",
+            &TypeName::Hex => "hex",
             &TypeName::Str => "string",
             &TypeName::List => "list",
         })

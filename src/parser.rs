@@ -7,6 +7,7 @@ pub enum ParseErr {
     MissingOpenBrace,
     MissingCloseBrace,
     MissingEndQuote,
+    BadHexLiteral,
 }
 
 pub fn parse(input: &str) -> Result<Program, ParseErr> {
@@ -19,13 +20,6 @@ pub fn parse(input: &str) -> Result<Program, ParseErr> {
             '{' => stack.push(),
 
             '}' => stack.pop()?,
-
-            '#' => loop {
-                match stream.next() {
-                    Some('\n') | None => break,
-                    _ => (),
-                }
-            },
 
             '"' => {
                 let mut buf = String::new();
@@ -56,7 +50,17 @@ pub fn parse(input: &str) -> Result<Program, ParseErr> {
                     word.extend(stream.next());
                 }
 
-                if let Ok(int) = word.parse::<i32>() {
+                if &word == "#" {
+                    loop {
+                        match stream.next() {
+                            Some('\n') | None => break,
+                            _ => continue,
+                        }
+                    }
+                } else if word.starts_with('#') {
+                    word.drain(0 .. 1);
+                    stack.emit(Word::Hex(parse_hex(word)?))?;
+                } else if let Ok(int) = word.parse::<i32>() {
                     stack.emit(Word::Int(int))?;
                 } else {
                     stack.emit(Word::Atom(word))?;
@@ -125,4 +129,17 @@ impl Stack {
             Err(ParseErr::MissingOpenBrace)
         }
     }
+}
+
+fn parse_hex(word: String) -> Result<u32, ParseErr> {
+    //if word.len() == 3 || word.len() == 4 {
+    //    let mut longer = String::with_capacity(word.len() * 2);
+    //    for ch in word.chars() {
+    //        longer.push(ch);
+    //        longer.push(ch);
+    //    }
+    //    word = longer;
+    //}
+
+    u32::from_str_radix(&word, 16).map_err(|_| ParseErr::BadHexLiteral)
 }
