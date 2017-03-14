@@ -6,7 +6,7 @@ loop {
         len capture
 
         if < 0 rot {
-            concat swap " ~> " flatten " " capture
+            strcat swap " ~> " flatten " " capture
         } {
             "> "
         }

@@ -9,6 +9,7 @@ pub use parser::parse;
 
 static STDLIB: &'static [(&'static str, &'static str)] = &[
     ("when", "if -rot {}"),
+    ("loop", "eval append { loop } unshift dup"),
     ("-rot", "rot rot"),
 ];
 
@@ -153,13 +154,6 @@ impl Shell {
                 self.data.push(word);
             },
 
-            "loop" => {
-                let body = self.pop()?.as_list()?;
-                self.code.push(Word::Atom("loop".into()));
-                self.code.push(Word::List(body.clone()));
-                self.code.extend(body.into_iter());
-            },
-
             "capture" => {
                 let dump = self.view().iter().cloned().collect::<Vec<_>>();
                 self.push(dump);
@@ -173,6 +167,13 @@ impl Shell {
             "len" => {
                 let len = self.pop()?.as_list()?.len();
                 self.push(len as i32);
+            },
+
+            "append" => {
+                let mut lhs = self.pop()?.as_list()?;
+                let rhs = self.pop()?.as_list()?;
+                lhs.extend(rhs.into_iter());
+                self.push(lhs);
             },
 
             "push" => {
@@ -257,7 +258,7 @@ impl Shell {
 
             "clear" => self.data.clear(),
 
-            "concat" => {
+            "strcat" => {
                 let mut lhs = self.pop()?.into_string();
                 let rhs = self.pop()?.into_string();
                 lhs.push_str(&rhs);
