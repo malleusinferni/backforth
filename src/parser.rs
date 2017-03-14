@@ -54,8 +54,6 @@ pub fn parse(input: &str) -> Result<Program, ParseErr> {
                     }
 
                     word.extend(stream.next());
-
-                    if ch == '=' { break; }
                 }
 
                 if let Ok(int) = word.parse::<i32>() {

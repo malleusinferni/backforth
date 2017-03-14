@@ -277,9 +277,17 @@ impl Shell {
                 self.push(-positive);
             },
 
-            "=" => self.int_binop(|x, y| Ok(x == y))?,
+            "==" => self.int_binop(|x, y| Ok(x == y))?,
             ">" => self.int_binop(|x, y| Ok(x > y))?,
             "<" => self.int_binop(|x, y| Ok(x < y))?,
+
+            "=" => {
+                let value = self.pop()?;
+                let name = self.code.pop()
+                    .ok_or(EvalErr::MacroFailed)?
+                    .as_atom()?;
+                self.dict.insert(name, value);
+            },
 
             "))" => {
                 let rhs = self.code.pop().ok_or(EvalErr::MacroFailed)?;
@@ -298,12 +306,7 @@ impl Shell {
                 return Err(EvalErr::MacroFailed);
             },
 
-            other => if other.ends_with("=") {
-                let mut name = other.to_owned();
-                name.pop(); // Remove final '='
-                let value = self.pop()?;
-                self.dict.insert(name, value);
-            } else if let Some(value) = self.dict.get(other).cloned() {
+            other => if let Some(value) = self.dict.get(other).cloned() {
                 match value {
                     Word::List(words) => self.code.extend(words),
                     other => self.push(other),
@@ -376,6 +379,13 @@ impl From<HashMap<String, Word>> for Word {
 impl Word {
     fn atom(name: &str) -> Self {
         Word::Atom(name.to_owned())
+    }
+
+    fn as_atom(self) -> Result<String, EvalErr> {
+        match self {
+            Word::Atom(name) => Ok(name),
+            val => Err(EvalErr::WrongType(val, TypeName::Atom)),
+        }
     }
 
     fn as_bool(self) -> Result<bool, EvalErr> {

@@ -5,11 +5,11 @@ Backforth is a concatenative language created by someone who considers such lang
 It looks like this:
 
 ```backforth
-print= {
+print = {
     echo
 }
 
-x= + * 3 2 1
+x = + * 3 2 1
 
 print x # Prints "7"
 ```

@@ -1,4 +1,4 @@
-factorial= {
+factorial = {
     dup
     when < 1 swap {
         dup
