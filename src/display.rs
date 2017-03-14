@@ -11,11 +11,15 @@ impl fmt::Display for Word {
 
             &Word::Atom(ref a) => write!(f, "{}", a),
 
-            &Word::List(ref words) => {
+            &Word::List(ref words) => if words.is_empty() {
+                write!(f, "{{}}")
+            } else {
                 write!(f, "{{ {} }}", words.flatten(" "))
             },
 
-            &Word::Dict(ref map) => {
+            &Word::Dict(ref map) => if map.is_empty() {
+                write!(f, "dict {{}}")
+            } else {
                 write!(f, "dict {{ {} }}", map.flatten(" ; "))
             },
         }
