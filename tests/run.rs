@@ -11,7 +11,8 @@ macro_rules! valid {
             };
 
             let mut env = Shell::new();
-            env.run(parse(&source).unwrap()).unwrap();
+            env.load(parse(&source).unwrap().into_iter());
+            env.run().unwrap();
             assert_eq!(env.view(), &[ $( $value ),* ]);
         }
     };

@@ -21,7 +21,11 @@ loop {
 fn main() {
     let program = backforth::parse(SOURCE).unwrap();
 
-    backforth::Shell::new().run(program).unwrap_or_else(|err| {
+    let mut shell = backforth::Shell::new();
+
+    shell.load(program.into_iter());
+
+    shell.run().unwrap_or_else(|err| {
         println!("{}", err);
     });
 }

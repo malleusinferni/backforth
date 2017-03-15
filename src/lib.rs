@@ -69,9 +69,11 @@ impl Shell {
         }
     }
 
-    pub fn run(&mut self, program: Program) -> Result<(), EvalErr> {
-        self.code.extend(program.into_iter());
+    pub fn load<P: Iterator<Item=Word>>(&mut self, program: P) {
+        self.code.extend(program);
+    }
 
+    pub fn run(&mut self) -> Result<(), EvalErr> {
         while let Some(word) = self.code.pop() {
             match word {
                 Word::List(words) => {
@@ -112,9 +114,9 @@ impl Shell {
                 let then_clause = self.pop()?.as_list()?;
                 let else_clause = self.pop()?.as_list()?;
                 if test {
-                    self.code.extend(then_clause.into_iter());
+                    self.load(then_clause.into_iter());
                 } else {
-                    self.code.extend(else_clause.into_iter());
+                    self.load(else_clause.into_iter());
                 }
             },
 
@@ -135,7 +137,7 @@ impl Shell {
                 self.restore.push(restore);
 
                 self.code.push(Word::atom("popeh"));
-                self.code.extend(body);
+                self.load(body.into_iter());
             },
 
             "popeh" => {
@@ -149,7 +151,7 @@ impl Shell {
 
             "eval" => {
                 let body = self.pop()?.as_list()?;
-                self.code.extend(body.into_iter());
+                self.load(body.into_iter());
             },
 
             "quote" => {
