@@ -25,9 +25,7 @@ fn main() {
         use backforth::Word;
 
         program.clear();
-        for word in &["eval", "parse", "load"] {
-            program.push(Word::Atom(word.to_string()));
-        }
+        program.push(Word::Atom("interpret".to_owned()));
         program.push(Word::from(path));
     }
 

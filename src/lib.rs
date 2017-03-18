@@ -13,6 +13,7 @@ static STDLIB: &'static [(&'static str, &'static str)] = &[
     ("-rot", "rot rot"),
     ("first", "drop swap shift"),
     ("last", "drop swap pop"),
+    ("interpret", "eval parse load"),
 ];
 
 #[derive(Clone, Debug, PartialEq)]
