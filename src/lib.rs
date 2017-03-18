@@ -251,6 +251,19 @@ impl Shell {
                 self.push(inbuf);
             },
 
+            "load" => {
+                use std::fs::File;
+                use std::io::Read;
+
+                let path = self.pop()?.as_str()?;
+
+                let mut inbuf = String::new();
+                let mut file = File::open(&path).unwrap();
+                file.read_to_string(&mut inbuf).unwrap();
+
+                self.push(inbuf);
+            },
+
             "flatten" => {
                 let sep = self.pop()?.into_string();
                 let list = self.pop()?.into_list();
