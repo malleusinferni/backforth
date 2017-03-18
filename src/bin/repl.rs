@@ -19,7 +19,17 @@ loop {
 "#;
 
 fn main() {
-    let program = backforth::parse(SOURCE).unwrap();
+    let mut program = backforth::parse(SOURCE).unwrap();
+
+    if let Some(path) = std::env::args().nth(1) {
+        use backforth::Word;
+
+        program.clear();
+        for word in &["eval", "parse", "load"] {
+            program.push(Word::Atom(word.to_string()));
+        }
+        program.push(Word::from(path));
+    }
 
     let mut shell = backforth::Shell::new();
 
