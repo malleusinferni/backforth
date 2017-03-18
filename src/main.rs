@@ -1,6 +1,6 @@
 extern crate backforth;
 
-static SOURCE: &'static str = r#"
+static REPL_SOURCE: &'static str = r#"
 loop {
     try {
         len capture
@@ -19,7 +19,7 @@ loop {
 "#;
 
 fn main() {
-    let mut program = backforth::parse(SOURCE).unwrap();
+    let mut program = backforth::parse(REPL_SOURCE).unwrap();
 
     if let Some(path) = std::env::args().nth(1) {
         use backforth::Word;
