@@ -52,7 +52,7 @@ pub fn parse(input: &str) -> Result<Program, ParseErr> {
                     word.extend(stream.next());
                 }
 
-                if &word == "#" {
+                if &word == "#" || word.starts_with("#!") {
                     loop {
                         match stream.next() {
                             Some('\n') | None => break,

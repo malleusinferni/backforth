@@ -1,0 +1,2 @@
+#!/usr/bin/env backforth
+echo "Hello, world"
