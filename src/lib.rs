@@ -3,7 +3,7 @@ mod display;
 
 use std::collections::{HashMap, VecDeque};
 
-use parser::{Program, ParseErr};
+use parser::{ParseErr};
 
 pub use parser::parse;
 
@@ -11,6 +11,8 @@ static STDLIB: &'static [(&'static str, &'static str)] = &[
     ("when", "if -rot {}"),
     ("loop", "eval append { loop } unshift dup"),
     ("-rot", "rot rot"),
+    ("first", "drop swap shift"),
+    ("last", "drop swap pop"),
 ];
 
 #[derive(Clone, Debug, PartialEq)]
@@ -167,6 +169,24 @@ impl Shell {
             "bindings" => {
                 let dict = self.dict.clone();
                 self.push(dict);
+            },
+
+            "debug" => {
+                for word in self.code.iter().rev() {
+                    for line in word.pretty_print(0) {
+                        println!("{}", line);
+                    }
+                }
+            },
+
+            "inspect" => {
+                let name = self.pop()?.as_atom()?;
+                let def = self.dict.get(&name)
+                    .ok_or(EvalErr::CantUnderstand(name))?;
+
+                for line in def.pretty_print(0) {
+                    println!("{}", line);
+                }
             },
 
             "len" => {

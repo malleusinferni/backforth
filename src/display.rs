@@ -84,3 +84,29 @@ impl fmt::Display for TypeName {
         })
     }
 }
+
+impl Word {
+    pub fn pretty_print(&self, indent_level: usize) -> Vec<String> {
+        let mut lines = vec![];
+
+        match self {
+            &Word::List(ref items) => if items.is_empty() {
+                lines.push("{}".to_owned());
+            } else {
+                lines.push("{".to_owned());
+
+                for item in items.iter().rev() {
+                    for line in item.pretty_print(indent_level + 1) {
+                        lines.push(format!("    {}", line));
+                    }
+                }
+
+                lines.push("}".to_owned());
+            },
+
+            other => lines.push(format!("{}", other)),
+        }
+
+        lines
+    }
+}
