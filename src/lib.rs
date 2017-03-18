@@ -252,6 +252,22 @@ impl Shell {
                 self.push(inbuf);
             },
 
+            "command" => {
+                use std::process::Command;
+
+                let name = self.pop()?.into_string();
+                let args = self.pop()?.into_list();
+
+                let output = Command::new(&name)
+                    .args({ args.into_iter().map(|arg| arg.to_string()) })
+                    .output()
+                    .unwrap();
+
+                self.push({
+                    String::from_utf8_lossy(&output.stdout).into_owned()
+                });
+            },
+
             "load" => {
                 use std::fs::File;
                 use std::io::Read;
@@ -302,6 +318,17 @@ impl Shell {
                 let rhs = self.pop()?.into_string();
                 lhs.push_str(&rhs);
                 self.push(lhs);
+            },
+
+            "lines" => {
+                let string: String = self.pop()?.as_str()?;
+                let mut words = VecDeque::new();
+
+                for line in string.lines() {
+                    words.push_back(Word::Str(line.into()));
+                }
+
+                self.push(words);
             },
 
             "hex" => {
