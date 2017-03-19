@@ -258,8 +258,14 @@ impl Shell {
                 let name = self.pop()?.into_string();
                 let args = self.pop()?.into_list();
 
+                let mut argv = Vec::with_capacity(args.len());
+
+                for arg in args {
+                    argv.push(arg.as_str()?);
+                }
+
                 let output = Command::new(&name)
-                    .args({ args.into_iter().map(|arg| arg.to_string()) })
+                    .args(argv)
                     .output()
                     .unwrap();
 
