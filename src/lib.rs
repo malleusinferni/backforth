@@ -123,6 +123,18 @@ impl Shell {
                 }
             },
 
+            "expand" => {
+                let names = self.pop()?.as_list()?;
+                let body = self.pop()?;
+
+                let mut dict = HashMap::new();
+                for name in names.into_iter() {
+                    dict.insert(name.as_atom()?, self.pop()?);
+                }
+
+                self.push(body.expand(&dict));
+            },
+
             "try" => {
                 /*
                  * popeh eval pusheh ... swap
@@ -532,6 +544,24 @@ impl Word {
         match self {
             Word::List(list) => list,
             other => vec![other].into(),
+        }
+    }
+
+    fn expand(self, dict: &HashMap<String, Word>) -> Self {
+        match self {
+            Word::Atom(name) => if dict.contains_key(&name) {
+                dict.get(&name).unwrap().clone()
+            } else {
+                Word::Atom(name)
+            },
+
+            Word::List(words) => Word::List({
+                words.into_iter().map(|word| {
+                    word.expand(dict)
+                }).collect()
+            }),
+
+            other => other,
         }
     }
 }

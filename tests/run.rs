@@ -3,7 +3,7 @@ extern crate backforth;
 use backforth::*;
 
 macro_rules! valid {
-    ( $name:ident, $( $value:expr ),* ) => {
+    ( $name:ident $(, $value:expr )* ) => {
         #[test]
         fn $name() {
             let source = {
@@ -18,4 +18,6 @@ macro_rules! valid {
     };
 }
 
+valid!(hello);
 valid!(factorial, Word::Int(120));
+valid!(expand, Word::Int(0));
