@@ -7,14 +7,7 @@ use parser::{ParseErr};
 
 pub use parser::parse;
 
-static STDLIB: &'static [(&'static str, &'static str)] = &[
-    ("when", "if -rot {}"),
-    ("loop", "eval append { loop } unshift dup"),
-    ("-rot", "rot rot"),
-    ("first", "drop swap shift"),
-    ("last", "drop swap pop"),
-    ("interpret", "eval parse load"),
-];
+static STDLIB: &'static str = include_str!("stdlib.\\iv");
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Word {
@@ -62,14 +55,17 @@ struct Env {
 
 impl Shell {
     pub fn new() -> Self {
-        Shell {
-            dict: STDLIB.iter().map(|&(ref k, ref v)| {
-                ((*k).to_owned(), Word::List(parse(v).unwrap().into()))
-            }).collect(),
+        let mut shell = Shell {
+            dict: HashMap::new(),
             data: Vec::new(),
             code: Vec::new(),
             restore: Vec::new(),
-        }
+        };
+
+        shell.load(parse(STDLIB).unwrap().into_iter());
+        shell.run().unwrap();
+
+        shell
     }
 
     pub fn load<P: Iterator<Item=Word>>(&mut self, program: P) {

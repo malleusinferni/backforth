@@ -1,29 +1,11 @@
 extern crate backforth;
 
-static REPL_SOURCE: &'static str = r#"
-loop {
-    try {
-        len capture
-
-        if < 0 rot {
-            strcat swap " ~> " flatten " " capture
-        } {
-            "> "
-        }
-
-        eval parse prompt
-    } {
-        echo
-    }
-}
-"#;
-
 fn main() {
-    let mut program = backforth::parse(REPL_SOURCE).unwrap();
+    use backforth::Word;
+
+    let mut program = vec![Word::Atom("repl".to_owned())];
 
     if let Some(path) = std::env::args().nth(1) {
-        use backforth::Word;
-
         program.clear();
         program.push(Word::Atom("interpret".to_owned()));
         program.push(Word::from(path));

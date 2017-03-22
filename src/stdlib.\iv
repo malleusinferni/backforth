@@ -1,0 +1,55 @@
+when = {
+    if -rot {}
+}
+
+-rot = {
+    rot
+    rot
+}
+
+loop = {
+    eval expand { BODY } {
+        eval BODY
+        loop BODY
+    }
+}
+
+while = {
+    eval expand { COND BODY } {
+        eval COND
+        when swap {
+            eval BODY
+            while COND BODY
+        }
+    }
+}
+
+first = {
+    drop swap shift
+}
+
+last = {
+    drop swap pop
+}
+
+interpret = {
+    eval parse load
+}
+
+repl = {
+    loop {
+        try {
+            len capture
+            
+            if < 0 rot {
+                strcat swap " ~> " flatten " " capture
+            } {
+                "> "
+            }
+
+            eval parse prompt
+        } {
+            echo
+        }
+    }
+}

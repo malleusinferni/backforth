@@ -1,20 +1,3 @@
-while = {
-    eval expand { COND BODY } {
-        eval COND
-        when swap {
-            eval BODY
-            while COND BODY
-        }
-    }
-}
-
-loop = {
-    eval expand { BODY } {
-        eval BODY
-        loop BODY
-    }
-}
-
 countdown = {
     while { < 0 dup } {
         echo dup + -1
