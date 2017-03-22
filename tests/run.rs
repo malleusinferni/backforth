@@ -7,7 +7,7 @@ macro_rules! valid {
         #[test]
         fn $name() {
             let source = {
-                include_str!(concat!("valid/", stringify!($name), ".b4"))
+                include_str!(concat!("valid/", stringify!($name), ".\\iv"))
             };
 
             let mut env = Shell::new();
@@ -20,4 +20,4 @@ macro_rules! valid {
 
 valid!(hello);
 valid!(factorial, Word::Int(120));
-valid!(expand, Word::Int(0));
+valid!(countdown, Word::Int(0));

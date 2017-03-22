@@ -40,7 +40,7 @@ repl = {
     loop {
         try {
             len capture
-            
+
             if < 0 rot {
                 strcat swap " ~> " flatten " " capture
             } {
