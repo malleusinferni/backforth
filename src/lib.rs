@@ -41,14 +41,66 @@ pub enum TypeName {
 }
 
 pub struct Shell {
-    dict: HashMap<String, Word>,
+    dict: HashMap<String, Binding>,
     data: Vec<Word>,
     code: Vec<Word>,
     restore: Vec<Env>,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq)]
+enum Builtin {
+    Bye,
+    Assign,
+    Eval,
+    Expand,
+    If,
+    Try,
+    PopEH,
+    Quote,
+    Explode,
+    Capture,
+    Debug,
+    Inspect,
+    Len,
+    Append,
+    Push,
+    Pop,
+    Shift,
+    Unshift,
+    Parse,
+    Echo,
+    Prompt,
+    Command,
+    Load,
+    Flatten,
+    Swap,
+    Rot,
+    Dup,
+    Drop,
+    Clear,
+    Strcat,
+    Lines,
+    Hex,
+    Int,
+    OpAdd,
+    OpSub,
+    OpMul,
+    OpDiv,
+    OpNeg,
+    OpEql,
+    OpLt,
+    OpGt,
+    InfixExpr,
+}
+
+#[derive(Clone, Debug)]
+enum Binding {
+    Primitive(Builtin),
+    Interpreted(Word),
+}
+
 struct Env {
-    dict: HashMap<String, Word>,
+    dict: HashMap<String, Binding>,
     data: Vec<Word>,
     code: Vec<Word>,
 }
@@ -56,7 +108,7 @@ struct Env {
 impl Shell {
     pub fn new() -> Self {
         let mut shell = Shell {
-            dict: HashMap::new(),
+            dict: Builtin::default_bindings(),
             data: Vec::new(),
             code: Vec::new(),
             restore: Vec::new(),
@@ -74,29 +126,35 @@ impl Shell {
 
     pub fn run(&mut self) -> Result<(), EvalErr> {
         while let Some(word) = self.code.pop() {
-            match word {
-                Word::List(words) => {
-                    self.push(words);
+            let name = match word {
+                Word::Atom(name) => name,
+
+                other => {
+                    self.push(other);
                     continue;
                 },
+            };
 
-                Word::Atom(name) => {
-                    if &name == "bye" {
-                        return Ok(());
-                    } else if let Err(err) = self.eval(&name) {
-                        if let Some(env) = self.restore.pop() {
-                            self.dict = env.dict;
-                            self.data = env.data;
-                            self.code = env.code;
-                            self.push(format!("{} error: {}", name, err));
-                        } else {
-                            return Err(err);
-                        }
-                    }
-                },
+            self.lookup(&name).and_then(|def| match def {
+                Binding::Primitive(op) => self.do_builtin(op),
 
-                other => self.push(other),
-            }
+                Binding::Interpreted(word) => {
+                    match word {
+                        Word::List(words) => self.load(words.into_iter()),
+                        other => self.code.push(other),
+                    };
+
+                    Ok(())
+                }
+            }).or_else(|err| {
+                if let Some(env) = self.restore.pop() {
+                    self.recover(env);
+                    self.push(format!("{} error: {}", &name, &err));
+                    Ok(())
+                } else {
+                    Err(err)
+                }
+            })?;
         }
 
         Ok(())
@@ -106,20 +164,42 @@ impl Shell {
         &self.data
     }
 
-    fn eval(&mut self, name: &str) -> Result<(), EvalErr> {
-        match name {
-            "if" => {
-                let test = self.pop()?.as_bool()?;
-                let then_clause = self.pop()?.as_list()?;
-                let else_clause = self.pop()?.as_list()?;
-                if test {
-                    self.load(then_clause.into_iter());
-                } else {
-                    self.load(else_clause.into_iter());
+    fn lookup(&self, name: &str) -> Result<Binding, EvalErr> {
+        self.dict.get(name).cloned().ok_or_else(|| {
+            EvalErr::CantUnderstand(name.to_owned())
+        })
+    }
+
+    fn recover(&mut self, env: Env) {
+        self.dict = env.dict;
+        self.code = env.code;
+        self.data = env.data;
+    }
+
+    fn do_builtin(&mut self, builtin: Builtin) -> Result<(), EvalErr> {
+        match builtin {
+            Builtin::Bye => {
+                self.code.clear();
+            },
+
+            Builtin::Assign => {
+                let name = self.code.pop()
+                    .ok_or(EvalErr::MacroFailed)?
+                    .as_atom()?;
+
+                let value = self.pop()?;
+
+                self.dict.insert(name, Binding::Interpreted(value));
+            },
+
+            Builtin::Eval => {
+                match self.pop()? {
+                    Word::List(words) => self.load(words.into_iter()),
+                    other => self.push(other),
                 }
             },
 
-            "expand" => {
+            Builtin::Expand => {
                 let names = self.pop()?.as_list()?;
                 let body = self.pop()?;
 
@@ -131,10 +211,19 @@ impl Shell {
                 self.push(body.expand(&dict));
             },
 
-            "try" => {
-                /*
-                 * popeh eval pusheh ... swap
-                 */
+            Builtin::If => {
+                let test = self.pop()?.as_bool()?;
+                let consequent = self.pop()?.as_list()?;
+                let alternative = self.pop()?.as_list()?;
+
+                if test {
+                    self.load(consequent.into_iter());
+                } else {
+                    self.load(alternative.into_iter());
+                }
+            },
+
+            Builtin::Try => {
                 let body = self.pop()?.as_list()?;
                 let catch = self.pop()?.as_list()?;
 
@@ -151,36 +240,26 @@ impl Shell {
                 self.load(body.into_iter());
             },
 
-            "popeh" => {
+            Builtin::PopEH => {
                 self.restore.pop();
             },
 
-            "explode" => {
+            Builtin::Quote => {
+                let word = self.code.pop().ok_or(EvalErr::MacroFailed)?;
+                self.data.push(word);
+            },
+
+            Builtin::Explode => {
                 let items = self.pop()?.as_list()?;
                 self.data.extend(items.into_iter());
             },
 
-            "eval" => {
-                let body = self.pop()?.as_list()?;
-                self.load(body.into_iter());
-            },
-
-            "quote" => {
-                let word = self.code.pop().ok_or(EvalErr::StackUnderflow)?;
-                self.data.push(word);
-            },
-
-            "capture" => {
+            Builtin::Capture => {
                 let dump = self.view().iter().cloned().collect::<Vec<_>>();
                 self.push(dump);
             },
 
-            "bindings" => {
-                let dict = self.dict.clone();
-                self.push(dict);
-            },
-
-            "debug" => {
+            Builtin::Debug => {
                 for word in self.code.iter().rev() {
                     for line in word.pretty_print(0) {
                         println!("{}", line);
@@ -188,7 +267,10 @@ impl Shell {
                 }
             },
 
-            "inspect" => {
+            Builtin::Inspect => {
+                println!("FIXME: UNIMPLEMENTED");
+
+                /*
                 let name = self.pop()?.as_atom()?;
                 let def = self.dict.get(&name)
                     .ok_or(EvalErr::CantUnderstand(name))?;
@@ -196,57 +278,60 @@ impl Shell {
                 for line in def.pretty_print(0) {
                     println!("{}", line);
                 }
+                */
             },
 
-            "len" => {
+            Builtin::Len => {
                 let len = self.pop()?.as_list()?.len();
                 self.push(len as i32);
             },
 
-            "append" => {
+            Builtin::Append => {
                 let mut lhs = self.pop()?.as_list()?;
                 let rhs = self.pop()?.as_list()?;
                 lhs.extend(rhs.into_iter());
                 self.push(lhs);
             },
 
-            "push" => {
+            Builtin::Push => {
                 let value = self.pop()?;
                 let mut list = self.pop()?.as_list()?;
                 list.push_back(value);
                 self.push(list);
             },
 
-            "pop" => {
+            Builtin::Pop => {
                 let mut list = self.pop()?.as_list()?;
                 let value = list.pop_back().ok_or(EvalErr::EmptyList)?;
                 self.push(list);
                 self.push(value);
             },
 
-            "shift" => {
+            Builtin::Shift => {
                 let mut list = self.pop()?.as_list()?;
                 let value = list.pop_front().ok_or(EvalErr::EmptyList)?;
                 self.push(list);
                 self.push(value);
             },
 
-            "unshift" => {
+            Builtin::Unshift => {
                 let value = self.pop()?;
                 let mut list = self.pop()?.as_list()?;
                 list.push_front(value);
                 self.push(list);
             },
 
-            "parse" => {
+            Builtin::Parse => {
                 let source = self.pop()?.as_str()?;
                 let program = parse(&source)?;
                 self.push(program);
             },
 
-            "echo" => println!("{}", self.pop()?.into_string()),
+            Builtin::Echo => {
+                println!("{}", self.pop()?.into_string());
+            },
 
-            "prompt" => {
+            Builtin::Prompt => {
                 use std::io::{stdin, stdout, Write};
 
                 let text = self.pop()?.into_string();
@@ -260,7 +345,7 @@ impl Shell {
                 self.push(inbuf);
             },
 
-            "command" => {
+            Builtin::Command => {
                 use std::process::Command;
 
                 let name = self.pop()?.into_string();
@@ -282,7 +367,7 @@ impl Shell {
                 });
             },
 
-            "load" => {
+            Builtin::Load => {
                 use std::fs::File;
                 use std::io::Read;
 
@@ -295,20 +380,20 @@ impl Shell {
                 self.push(inbuf);
             },
 
-            "flatten" => {
+            Builtin::Flatten => {
                 let sep = self.pop()?.into_string();
                 let list = self.pop()?.into_list();
                 self.push(list.flatten(&sep));
             },
 
-            "swap" => {
+            Builtin::Swap => {
                 let a = self.pop()?;
                 let b = self.pop()?;
                 self.push(a);
                 self.push(b);
             },
 
-            "rot" => {
+            Builtin::Rot => {
                 let a = self.pop()?;
                 let b = self.pop()?;
                 let c = self.pop()?;
@@ -317,24 +402,28 @@ impl Shell {
                 self.push(c);
             },
 
-            "dup" => {
+            Builtin::Dup => {
                 let val = self.pop()?;
                 self.push(val.clone());
                 self.push(val);
             },
 
-            "drop" => { let _ = self.pop()?; },
+            Builtin::Drop => {
+                let _ = self.pop()?;
+            },
 
-            "clear" => self.data.clear(),
+            Builtin::Clear => {
+                self.data.clear();
+            },
 
-            "strcat" => {
+            Builtin::Strcat => {
                 let mut lhs = self.pop()?.into_string();
                 let rhs = self.pop()?.into_string();
                 lhs.push_str(&rhs);
                 self.push(lhs);
             },
 
-            "lines" => {
+            Builtin::Lines => {
                 let string: String = self.pop()?.as_str()?;
                 let mut words = VecDeque::new();
 
@@ -345,41 +434,52 @@ impl Shell {
                 self.push(words);
             },
 
-            "hex" => {
+            Builtin::Hex => {
                 let hex = self.pop()?.into_hex()?;
                 self.push(hex);
             },
 
-            "int" => {
+            Builtin::Int => {
                 let int = self.pop()?.into_int()?;
                 self.push(int);
             },
 
-            "+" => self.int_binop(|x, y| Ok(x + y))?,
-            "-" => self.int_binop(|x, y| Ok(x - y))?,
-            "*" => self.int_binop(|x, y| Ok(x * y))?,
-            "/" => self.int_binop(|x, y| x.checked_div(y).ok_or({
-                EvalErr::DivideByZero
-            }))?,
+            Builtin::OpAdd => {
+                self.int_binop(|x, y| Ok(x + y))?;
+            },
 
-            "~" => {
+            Builtin::OpSub => {
+                self.int_binop(|x, y| Ok(x - y))?;
+            },
+
+            Builtin::OpMul => {
+                self.int_binop(|x, y| Ok(x * y))?;
+            },
+
+            Builtin::OpDiv => {
+                self.int_binop(|x, y| x.checked_div(y).ok_or({
+                    EvalErr::DivideByZero
+                }))?;
+            },
+
+            Builtin::OpNeg => {
                 let positive = self.pop()?.as_int()?;
                 self.push(-positive);
             },
 
-            "==" => self.int_binop(|x, y| Ok(x == y))?,
-            ">" => self.int_binop(|x, y| Ok(x > y))?,
-            "<" => self.int_binop(|x, y| Ok(x < y))?,
-
-            "=" => {
-                let value = self.pop()?;
-                let name = self.code.pop()
-                    .ok_or(EvalErr::MacroFailed)?
-                    .as_atom()?;
-                self.dict.insert(name, value);
+            Builtin::OpEql => {
+                self.int_binop(|x, y| Ok(x == y))?;
             },
 
-            "))" => {
+            Builtin::OpGt => {
+                self.int_binop(|x, y| Ok(x > y))?;
+            },
+
+            Builtin::OpLt => {
+                self.int_binop(|x, y| Ok(x < y))?;
+            },
+
+            Builtin::InfixExpr => {
                 let rhs = self.code.pop().ok_or(EvalErr::MacroFailed)?;
                 let op = self.code.pop().ok_or(EvalErr::MacroFailed)?;
                 let lhs = self.code.pop().ok_or(EvalErr::MacroFailed)?;
@@ -396,14 +496,6 @@ impl Shell {
                 return Err(EvalErr::MacroFailed);
             },
 
-            other => if let Some(value) = self.dict.get(other).cloned() {
-                match value {
-                    Word::List(words) => self.code.extend(words),
-                    other => self.push(other),
-                }
-            } else {
-                return Err(EvalErr::CantUnderstand(other.to_owned()));
-            },
         }
 
         Ok(())
@@ -593,5 +685,70 @@ impl Flattenable for HashMap<String, Word> {
         self.iter().map(|(ref k, ref v)| {
             format!("{} = {}", k, v)
         }).collect::<Vec<_>>().join(sep)
+    }
+}
+
+impl From<Builtin> for Binding {
+    fn from(op: Builtin) -> Self {
+        Binding::Primitive(op)
+    }
+}
+
+macro_rules! hash_map {
+    ( $( $k:expr => $v:expr ,)* ) => {{
+        let mut _hash_map = ::std::collections::HashMap::new();
+        $( _hash_map.insert($k.into(), $v.into()); )*
+        _hash_map
+    }};
+}
+
+impl Builtin {
+    fn default_bindings() -> HashMap<String, Binding> {
+        use Builtin::*;
+
+        hash_map![
+            "bye" => Bye,
+            "=" => Assign,
+            "eval" => Eval,
+            "expand" => Expand,
+            "if" => If,
+            "try" => Try,
+            "popeh" => PopEH,
+            "quote" => Quote,
+            "explode" => Explode,
+            "capture" => Capture,
+            "debug" => Debug,
+            "inspect" => Inspect,
+            "len" => Len,
+            "append" => Append,
+            "push" => Push,
+            "pop" => Pop,
+            "shift" => Shift,
+            "unshift" => Unshift,
+            "parse" => Parse,
+            "echo" => Echo,
+            "prompt" => Prompt,
+            "command" => Command,
+            "load" => Load,
+            "flatten" => Flatten,
+            "swap" => Swap,
+            "rot" => Rot,
+            "dup" => Dup,
+            "drop" => Drop,
+            "clear" => Clear,
+            "strcat" => Strcat,
+            "lines" => Lines,
+            "hex" => Hex,
+            "int" => Int,
+            "+" => OpAdd,
+            "-" => OpSub,
+            "*" => OpMul,
+            "/" => OpDiv,
+            "~" => OpNeg,
+            "==" => OpEql,
+            "<" => OpLt,
+            ">" => OpGt,
+            "))" => InfixExpr,
+        ]
     }
 }
