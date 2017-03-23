@@ -1,10 +1,12 @@
 factorial = {
     dup
-    when < 1 swap {
+    while { < 1 dup } {
+        + -1
         dup
-        - swap 1
-        * factorial
+        * rot
+        swap
     }
+    drop
 }
 
 factorial 5 # => 120
