@@ -272,17 +272,20 @@ impl Shell {
             },
 
             Builtin::Inspect => {
-                println!("FIXME: UNIMPLEMENTED");
-
-                /*
                 let name = self.pop()?.as_atom()?;
-                let def = self.dict.get(&name)
-                    .ok_or(EvalErr::CantUnderstand(name))?;
+                let def = self.lookup(&name)?;
 
-                for line in def.pretty_print(0) {
-                    println!("{}", line);
+                match def {
+                    Binding::Primitive(_) => {
+                        println!("<BUILTIN>");
+                    },
+
+                    Binding::Interpreted(ref def) => {
+                        for line in def.pretty_print(0) {
+                            println!("{}", line);
+                        }
+                    },
                 }
-                */
             },
 
             Builtin::Len => {
