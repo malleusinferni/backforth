@@ -472,7 +472,9 @@ impl Shell {
             },
 
             Builtin::OpEql => {
-                self.int_binop(|x, y| Ok(x == y))?;
+                let lhs = self.pop()?;
+                let rhs = self.pop()?;
+                self.push(lhs == rhs);
             },
 
             Builtin::OpGt => {
