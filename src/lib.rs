@@ -1,7 +1,11 @@
+extern crate ordermap;
+
 mod parser;
 mod display;
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{VecDeque};
+
+use ordermap::OrderMap;
 
 use parser::{ParseErr};
 
@@ -9,14 +13,14 @@ pub use parser::parse;
 
 static STDLIB: &'static str = include_str!("stdlib.\\iv");
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum Word {
     Atom(String),
     Int(i32),
     Hex(u32),
     Str(String),
     List(VecDeque<Word>),
-    Dict(HashMap<String, Word>),
+    Dict(OrderMap<String, Word>),
 }
 
 #[derive(Clone, Debug)]
@@ -41,7 +45,7 @@ pub enum TypeName {
 }
 
 pub struct Shell {
-    dict: HashMap<String, Binding>,
+    dict: OrderMap<String, Binding>,
     data: Vec<Word>,
     code: Vec<Word>,
     restore: Vec<Env>,
@@ -100,7 +104,7 @@ enum Binding {
 }
 
 struct Env {
-    dict: HashMap<String, Binding>,
+    dict: OrderMap<String, Binding>,
     data: Vec<Word>,
     code: Vec<Word>,
 }
@@ -203,7 +207,7 @@ impl Shell {
                 let names = self.pop()?.as_list()?;
                 let body = self.pop()?;
 
-                let mut dict = HashMap::new();
+                let mut dict = OrderMap::new();
                 for name in names.into_iter() {
                     dict.insert(name.as_atom()?, self.pop()?);
                 }
@@ -558,9 +562,32 @@ impl From<String> for Word {
     }
 }
 
-impl From<HashMap<String, Word>> for Word {
-    fn from(dict: HashMap<String, Word>) -> Self {
+impl From<OrderMap<String, Word>> for Word {
+    fn from(dict: OrderMap<String, Word>) -> Self {
         Word::Dict(dict)
+    }
+}
+
+impl PartialEq for Word {
+    fn eq(&self, rhs: &Self) -> bool {
+        match (self, rhs) {
+            (&Word::Int(lhs), &Word::Int(rhs)) => lhs == rhs,
+            (&Word::Hex(lhs), &Word::Hex(rhs)) => lhs == rhs,
+
+            (&Word::Atom(ref lhs), &Word::Atom(ref rhs)) => lhs == rhs,
+            (&Word::Str(ref lhs), &Word::Str(ref rhs)) => lhs == rhs,
+            (&Word::List(ref lhs), &Word::List(ref rhs)) => lhs == rhs,
+
+            (&Word::Dict(ref lhs), &Word::Dict(ref rhs)) => {
+                for (k, v) in lhs.iter() {
+                    if rhs.get(k) != Some(v) { return false; }
+                }
+
+                true
+            },
+
+            _ => false,
+        }
     }
 }
 
@@ -635,7 +662,7 @@ impl Word {
         }
     }
 
-    fn expand(self, dict: &HashMap<String, Word>) -> Self {
+    fn expand(self, dict: &OrderMap<String, Word>) -> Self {
         match self {
             Word::Atom(name) => if dict.contains_key(&name) {
                 dict.get(&name).unwrap().clone()
@@ -680,7 +707,7 @@ impl Flattenable for VecDeque<Word> {
     }
 }
 
-impl Flattenable for HashMap<String, Word> {
+impl Flattenable for OrderMap<String, Word> {
     fn flatten(&self, sep: &str) -> String {
         self.iter().map(|(ref k, ref v)| {
             format!("{} = {}", k, v)
@@ -694,19 +721,19 @@ impl From<Builtin> for Binding {
     }
 }
 
-macro_rules! hash_map {
+macro_rules! order_map {
     ( $( $k:expr => $v:expr ,)* ) => {{
-        let mut _hash_map = ::std::collections::HashMap::new();
+        let mut _hash_map = ::ordermap::OrderMap::new();
         $( _hash_map.insert($k.into(), $v.into()); )*
         _hash_map
     }};
 }
 
 impl Builtin {
-    fn default_bindings() -> HashMap<String, Binding> {
+    fn default_bindings() -> OrderMap<String, Binding> {
         use Builtin::*;
 
-        hash_map![
+        order_map![
             "bye" => Bye,
             "=" => Assign,
             "eval" => Eval,

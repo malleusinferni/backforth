@@ -19,7 +19,7 @@ impl fmt::Display for Word {
                 write!(f, "{{ {} }}", words.flatten(" "))
             },
 
-            &Word::Dict(ref map) => if map.is_empty() {
+            &Word::Dict(ref map) => if map.len() == 0 {
                 write!(f, "dict {{}}")
             } else {
                 write!(f, "dict {{ {} }}", map.flatten("; "))
