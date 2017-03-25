@@ -28,6 +28,23 @@ impl fmt::Display for Word {
     }
 }
 
+impl fmt::Display for TypeSpec {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut vars = "abcdefghijklmnopqrstuvwxyz".chars();
+
+        let mut names = |count| {
+            let mut output = String::new();
+            for _ in 0 .. count {
+                output.push(vars.next().unwrap());
+                output.push(' ');
+            }
+            output
+        };
+
+        write!(f, "( {}-- {})", names(self.input), names(self.output))
+    }
+}
+
 impl fmt::Display for ParseErr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", match self {
@@ -68,6 +85,10 @@ impl fmt::Display for EvalErr {
 
             &EvalErr::MacroFailed => {
                 write!(f, "bad arguments for macro")
+            },
+
+            &EvalErr::IllegalStackEffect(input, output) => {
+                write!(f, "illegal stack effect ( {} -- {} )", input, output)
             },
         }
     }

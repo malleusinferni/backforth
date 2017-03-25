@@ -33,6 +33,7 @@ pub enum EvalErr {
     BadParse(ParseErr),
     EmptyList,
     MacroFailed,
+    IllegalStackEffect(usize, usize),
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -99,7 +100,14 @@ enum Builtin {
 #[derive(Clone, Debug)]
 enum Binding {
     Primitive(Builtin),
-    Interpreted(Word),
+    Interpreted(TypeSpec, Word),
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct TypeSpec {
+    pub input: usize,
+    pub output: usize,
+    pub exact: bool,
 }
 
 struct Env {
@@ -141,7 +149,11 @@ impl Shell {
             self.lookup(&name).and_then(|def| match def {
                 Binding::Primitive(op) => self.do_builtin(op),
 
-                Binding::Interpreted(word) => {
+                Binding::Interpreted(typespec, word) => {
+                    if self.data.len() < typespec.input {
+                        return Err(EvalErr::StackUnderflow);
+                    }
+
                     match word {
                         Word::List(words) => self.load(words.into_iter()),
                         other => self.code.push(other),
@@ -173,6 +185,38 @@ impl Shell {
         })
     }
 
+    fn infer_type(&self, def: &VecDeque<Word>) -> Result<TypeSpec, EvalErr> {
+        let mut spec = TypeSpec {
+            input: 0,
+            output: 0,
+            exact: true,
+        };
+
+        for word in def.iter().rev() {
+            if let Some(next) = self.get_type(word) {
+                spec.merge(next)?;
+            } else {
+                spec.exact = false;
+            }
+
+            if !spec.exact { break; }
+        }
+
+        Ok(spec)
+    }
+
+    fn get_type(&self, word: &Word) -> Option<TypeSpec> {
+        let name = match word {
+            &Word::Atom(ref name) => name,
+            _ => return Some(TypeSpec::literal()),
+        };
+
+        self.dict.get(name).map(|def| match def {
+            &Binding::Primitive(prim) => prim.get_type(),
+            &Binding::Interpreted(spec, _) => spec,
+        })
+    }
+
     fn recover(&mut self, env: Env) {
         self.dict = env.dict;
         self.code = env.code;
@@ -192,7 +236,14 @@ impl Shell {
 
                 let value = self.pop()?;
 
-                self.dict.insert(name, Binding::Interpreted(value));
+                let typespec = match &value {
+                    &Word::List(ref items) => self.infer_type(items)?,
+                    _ => TypeSpec::literal(),
+                };
+
+                self.dict.insert(name, {
+                    Binding::Interpreted(typespec, value)
+                });
             },
 
             Builtin::Eval => {
@@ -275,11 +326,12 @@ impl Shell {
                 let def = self.lookup(&name)?;
 
                 match def {
-                    Binding::Primitive(_) => {
-                        println!("<BUILTIN>");
+                    Binding::Primitive(prim) => {
+                        println!("<BUILTIN> {}", prim.get_type());
                     },
 
-                    Binding::Interpreted(ref def) => {
+                    Binding::Interpreted(ref spec, ref def) => {
+                        println!("{} {} =", &name, spec);
                         for line in def.pretty_print(0) {
                             println!("{}", line);
                         }
@@ -719,6 +771,92 @@ impl Flattenable for OrderMap<String, Word> {
 impl From<Builtin> for Binding {
     fn from(op: Builtin) -> Self {
         Binding::Primitive(op)
+    }
+}
+
+impl Builtin {
+    fn get_type(self) -> TypeSpec {
+        let exact = |i, o| TypeSpec {
+            input: i,
+            output: o,
+            exact: true,
+        };
+
+        let inexact = |i| TypeSpec {
+            input: i,
+            output: 0,
+            exact: false,
+        };
+
+        use Builtin::*;
+
+        match self {
+            Bye => inexact(0),
+            Assign => inexact(1),
+            Eval => inexact(1),
+            Expand => inexact(2),
+            If => inexact(3),
+            Try => inexact(2),
+            PopEH => exact(0, 0),
+            Quote => inexact(0),
+            Explode => inexact(1),
+            Capture => inexact(0),
+            Debug => exact(0, 0),
+            Inspect => exact(1, 0),
+            Len => exact(1, 1),
+            Append => exact(2, 1),
+            Strcat => exact(2, 1),
+            Push => exact(2, 1),
+            Pop => exact(1, 2),
+            Shift => exact(1, 2),
+            Unshift => exact(2, 1),
+            Parse => exact(1, 1),
+            Echo => exact(1, 0),
+            Prompt => exact(1, 1),
+            Command => exact(2, 1),
+            Load => exact(1, 1),
+            Flatten => exact(2, 1),
+            Pick => exact(2, 2),
+            Roll => exact(2, 1),
+            Drop => exact(1, 0),
+            Clear => inexact(0),
+            Lines => exact(1, 1),
+            Hex => exact(1, 1),
+            Int => exact(1, 1),
+            OpAdd => exact(2, 1),
+            OpDiv => exact(2, 1),
+            OpSub => exact(2, 1),
+            OpMul => exact(2, 1),
+            OpNeg => exact(1, 1),
+            OpEql => exact(2, 1),
+            OpGt => exact(2, 1),
+            OpLt => exact(2, 1),
+            InfixExpr => inexact(0),
+        }
+    }
+}
+
+impl TypeSpec {
+    fn literal() -> Self {
+        TypeSpec {
+            input: 0,
+            output: 1,
+            exact: true,
+        }
+    }
+
+    fn merge(&mut self, rhs: Self) -> Result<(), EvalErr> {
+        if self.output < rhs.input {
+            self.input += rhs.input - self.output;
+            self.output = 0;
+        } else {
+            self.output -= rhs.input;
+        }
+
+        self.output += rhs.output;
+        self.exact = self.exact && rhs.exact;
+
+        Ok(())
     }
 }
 
