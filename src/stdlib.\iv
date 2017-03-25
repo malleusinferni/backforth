@@ -1,10 +1,26 @@
-when = {
-    if -rot {}
+dup = {
+    pick 0
+}
+
+over = {
+    pick 1
+}
+
+swap = {
+    roll 1
+}
+
+rot = {
+    roll 2
 }
 
 -rot = {
     rot
     rot
+}
+
+when = {
+    if -rot {}
 }
 
 loop = {

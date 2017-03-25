@@ -77,9 +77,8 @@ enum Builtin {
     Command,
     Load,
     Flatten,
-    Swap,
-    Rot,
-    Dup,
+    Pick,
+    Roll,
     Drop,
     Clear,
     Strcat,
@@ -393,26 +392,23 @@ impl Shell {
                 self.push(list.flatten(&sep));
             },
 
-            Builtin::Swap => {
-                let a = self.pop()?;
-                let b = self.pop()?;
-                self.push(a);
-                self.push(b);
+            Builtin::Pick => {
+                let i = self.pop()?.into_hex()? as usize;
+                let word = self.data.iter().rev().nth(i).cloned()
+                    .ok_or(EvalErr::StackUnderflow)?;
+                self.push(word);
             },
 
-            Builtin::Rot => {
-                let a = self.pop()?;
-                let b = self.pop()?;
-                let c = self.pop()?;
-                self.push(b);
-                self.push(a);
-                self.push(c);
-            },
+            Builtin::Roll => {
+                let i = self.pop()?.into_hex()? as usize;
+                if i >= self.data.len() {
+                    return Err(EvalErr::StackUnderflow);
+                }
 
-            Builtin::Dup => {
-                let val = self.pop()?;
-                self.push(val.clone());
-                self.push(val);
+                self.data.reverse();
+                let word = self.data.remove(i);
+                self.data.reverse();
+                self.push(word);
             },
 
             Builtin::Drop => {
@@ -763,9 +759,8 @@ impl Builtin {
             "command" => Command,
             "load" => Load,
             "flatten" => Flatten,
-            "swap" => Swap,
-            "rot" => Rot,
-            "dup" => Dup,
+            "pick" => Pick,
+            "roll" => Roll,
             "drop" => Drop,
             "clear" => Clear,
             "strcat" => Strcat,
