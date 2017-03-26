@@ -47,7 +47,7 @@ pub enum TypeName {
 
 pub struct Shell {
     dict: OrderMap<String, Binding>,
-    data: Vec<Word>,
+    data: VecDeque<Word>,
     code: Vec<Word>,
     restore: Vec<Env>,
 }
@@ -112,7 +112,7 @@ pub struct TypeSpec {
 
 struct Env {
     dict: OrderMap<String, Binding>,
-    data: Vec<Word>,
+    data: VecDeque<Word>,
     code: Vec<Word>,
 }
 
@@ -120,7 +120,7 @@ impl Shell {
     pub fn new() -> Self {
         let mut shell = Shell {
             dict: Builtin::default_bindings(),
-            data: Vec::new(),
+            data: VecDeque::new(),
             code: Vec::new(),
             restore: Vec::new(),
         };
@@ -175,8 +175,8 @@ impl Shell {
         Ok(())
     }
 
-    pub fn view(&self) -> &[Word] {
-        &self.data
+    pub fn capture(&self) -> VecDeque<Word> {
+        self.data.clone()
     }
 
     fn lookup(&self, name: &str) -> Result<Binding, EvalErr> {
@@ -300,7 +300,7 @@ impl Shell {
 
             Builtin::Quote => {
                 let word = self.code.pop().ok_or(EvalErr::MacroFailed)?;
-                self.data.push(word);
+                self.push(word);
             },
 
             Builtin::Explode => {
@@ -309,8 +309,8 @@ impl Shell {
             },
 
             Builtin::Capture => {
-                let dump = self.view().iter().cloned().collect::<Vec<_>>();
-                self.push(dump);
+                let capture = self.capture();
+                self.push(capture);
             },
 
             Builtin::Debug => {
@@ -447,21 +447,19 @@ impl Shell {
 
             Builtin::Pick => {
                 let i = self.pop()?.into_hex()? as usize;
-                let word = self.data.iter().rev().nth(i).cloned()
+                let word = self.data.iter().nth(i).cloned()
                     .ok_or(EvalErr::StackUnderflow)?;
                 self.push(word);
             },
 
             Builtin::Roll => {
                 let i = self.pop()?.into_hex()? as usize;
-                if i >= self.data.len() {
+
+                if let Some(word) = self.data.remove(i) {
+                    self.push(word)
+                } else {
                     return Err(EvalErr::StackUnderflow);
                 }
-
-                self.data.reverse();
-                let word = self.data.remove(i);
-                self.data.reverse();
-                self.push(word);
             },
 
             Builtin::Drop => {
@@ -569,11 +567,11 @@ impl Shell {
     }
 
     fn push<T: Into<Word>>(&mut self, t: T) {
-        self.data.push(t.into());
+        self.data.push_front(t.into());
     }
 
     fn pop(&mut self) -> Result<Word, EvalErr> {
-        self.data.pop().ok_or(EvalErr::StackUnderflow)
+        self.data.pop_front().ok_or(EvalErr::StackUnderflow)
     }
 }
 
