@@ -327,7 +327,8 @@ impl Shell {
 
                 match def {
                     Binding::Primitive(prim) => {
-                        println!("<BUILTIN> {}", prim.get_type());
+                        let spec = prim.get_type();
+                        println!("{} {} = <BUILTIN>", &name, spec);
                     },
 
                     Binding::Interpreted(ref spec, ref def) => {
